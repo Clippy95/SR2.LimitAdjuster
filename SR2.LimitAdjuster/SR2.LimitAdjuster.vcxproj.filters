@@ -25,6 +25,9 @@
     <Filter Include="include\usercaller">
       <UniqueIdentifier>{f6032d71-2978-4945-9300-44302a6add38}</UniqueIdentifier>
     </Filter>
+    <Filter Include="include\mini">
+      <UniqueIdentifier>{f84e7ffa-0330-49ea-88b1-f97da7dd0d19}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="framework.h">
@@ -65,6 +68,12 @@
     </ClInclude>
     <ClInclude Include="Math.h">
       <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="include\mini\ini.h">
+      <Filter>include\mini</Filter>
+    </ClInclude>
+    <ClInclude Include="include\IniReader.h">
+      <Filter>include</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

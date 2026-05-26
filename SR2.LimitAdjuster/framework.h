@@ -7,6 +7,16 @@
 #include <libloaderapi.h>
 #include <bit>
 #include <cstdint>
+#include <safetyhook.hpp>
+#include <fstream>
+#include <vector>
+#include <string>
+#include <memory>
+#include <algorithm>
+#include <filesystem>
+#include <mutex>
+#include <cstdarg>
+#include <unordered_set>
 using namespace Memory::VP::DynBase;
 static auto HandleDynAddress = GetModuleHandle(nullptr);
 template<typename AT>
