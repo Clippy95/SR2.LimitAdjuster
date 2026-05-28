@@ -6,7 +6,7 @@
 namespace CLimitAdjuster
 {
     constexpr uint32_t kVanillaCustomizationItemsLimit = 1050;
-    constexpr uint32_t kVanillaItems3DLimit = 219;
+    constexpr uint32_t kVanillaItems3DLimit = 220;
     constexpr uint32_t kVanillaCustomizationLogosLimit = 384;
     constexpr uint32_t kMaxCustomizationLogoIndex = 0xFFFE;
     constexpr uint32_t kAutoCustomizationLogoHeadroom = 20;
