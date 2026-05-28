@@ -354,7 +354,7 @@ namespace CLimitAdjuster
         CIniReader ini{};
         AdjusterOptions.force_dyn = ini.ReadInteger("MAIN", "ForceEvenIfBelow", true) != 0;
         ExtendedSaves::InstallHooks();
-        ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSave);
+        //ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSave);
         static auto testing = safetyhook::create_mid(0x7BBA68_g, [](SafetyHookContext& ctx) {
             xml_element* node = (xml_element*)ctx.eax;
             });
