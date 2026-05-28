@@ -159,3 +159,20 @@ inline unsigned int __cdecl xml_count(xml_element* element, const char* tag)
 	}
 	return count;
 }
+
+inline xml_element* xml_find_child(xml_element* parent, const char* name)
+{
+	for (auto e = parent ? parent->elements : nullptr; e; e = e->next)
+		if (!_stricmp(e->name, name))
+			return e;
+	return nullptr;
+}
+
+inline int xml_count_children(xml_element* parent, const char* name)
+{
+	int count = 0;
+	for (auto e = parent ? parent->elements : nullptr; e; e = e->next)
+		if (!_stricmp(e->name, name))
+			++count;
+	return count;
+}

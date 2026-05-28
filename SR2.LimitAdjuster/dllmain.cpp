@@ -226,6 +226,64 @@ namespace CLimitAdjuster
         }
     }
 
+    addr_xref Logos_Array_xrefs[] = {
+    { 0x007BD14E, 0x0004 },  // mov     ecx, offset Logos.m_name_checksum -> 0x02A0A7F4
+    { 0x007BD19B, 0x0000 },  // lea     eax, Logos.m_name[eax*8] -> 0x02A0A7F0
+    { 0x007BDF4E, 0x0000 },  // mov     [esp+74h+var_60], offset Logos -> 0x02A0A7F0
+    { 0x007BE40A, 0x0004 },  // mov     ecx, offset Logos.m_name_checksum -> 0x02A0A7F4
+    { 0x007BE429, 0x0000 },  // lea     eax, Logos.m_name[eax*8] -> 0x02A0A7F0
+    { 0x007C029E, 0x0000 },  // cmp     eax, offset Logos -> 0x02A0A7F0
+    { 0x007C02B1, 0x0000 },  // lea     ecx, Logos.m_name[ecx*8] -> 0x02A0A7F0
+    { 0x007C02BA, 0x0000 },  // sub     eax, offset Logos -> 0x02A0A7F0
+    { 0x007C10EA, 0x0000 },  // cmp     eax, offset Logos -> 0x02A0A7F0
+    { 0x007C10FD, 0x0000 },  // lea     ecx, Logos.m_name[ecx*8] -> 0x02A0A7F0
+    { 0x007C1106, 0x0000 },  // sub     eax, offset Logos -> 0x02A0A7F0
+    { 0x007C2BE4, 0x0004 },  // mov     ecx, offset Logos.m_name_checksum -> 0x02A0A7F4
+    { 0x007C2BFE, 0x0000 },  // lea     eax, Logos.m_name[eax*8] -> 0x02A0A7F0
+    { 0x007C3612, 0x0004 },  // mov     ecx, offset Logos.m_name_checksum -> 0x02A0A7F4
+    { 0x007C3668, 0x0000 },  // lea     eax, Logos.m_name[eax*8] -> 0x02A0A7F0
+    { 0x007C3891, 0x0004 },  // mov     ecx, offset Logos.m_name_checksum -> 0x02A0A7F4
+    { 0x007C38B7, 0x0000 },  // lea     eax, Logos.m_name[eax*8] -> 0x02A0A7F0
+    { 0x007C4094, 0x0004 },  // mov     ecx, offset Logos.m_name_checksum -> 0x02A0A7F4
+    { 0x007C40EC, 0x0000 },  // lea     eax, Logos.m_name[eax*8] -> 0x02A0A7F0
+    { 0x007C40F5, 0x0000 },  // cmp     eax, offset Logos -> 0x02A0A7F0
+    { 0x007C4102, 0x0000 },  // lea     edx, Logos.m_name[ecx*8] -> 0x02A0A7F0
+    { 0x007C410B, 0x0000 },  // sub     eax, offset Logos -> 0x02A0A7F0
+    { 0x007C4C98, 0x0000 },  // cmp     eax, offset Logos -> 0x02A0A7F0
+    { 0x007C5288, 0x0004 },  // mov     ecx, offset Logos.m_name_checksum -> 0x02A0A7F4
+    { 0x007C52A8, 0x0000 },  // lea     eax, Logos.m_name[eax*8] -> 0x02A0A7F0
+    { 0x007C58D5, 0x0000 },  // cmp     eax, offset Logos -> 0x02A0A7F0
+    { 0x007C58E8, 0x0000 },  // lea     edx, Logos.m_name[ecx*8] -> 0x02A0A7F0
+    { 0x007C58F1, 0x0000 },  // sub     eax, offset Logos -> 0x02A0A7F0
+    { 0x007C591A, 0x0000 },  // cmp     eax, offset Logos -> 0x02A0A7F0
+    { 0x007C592D, 0x0000 },  // lea     edx, Logos.m_name[ecx*8] -> 0x02A0A7F0
+    { 0x007C5936, 0x0000 },  // sub     eax, offset Logos -> 0x02A0A7F0
+    { 0x007C5975, 0x0000 },  // lea     eax, Logos.m_name[eax*8] -> 0x02A0A7F0
+    { 0x007C9FE1, 0x0000 },  // cmp     eax, offset Logos -> 0x02A0A7F0
+    { 0x007C9FF4, 0x0000 },  // lea     ecx, Logos.m_name[ecx*8] -> 0x02A0A7F0
+    { 0x007C9FFD, 0x0000 },  // sub     eax, offset Logos -> 0x02A0A7F0
+    { 0x007CB03E, 0x0000 },  // cmp     ecx, offset Logos -> 0x02A0A7F0
+    { 0x007CB050, 0x0000 },  // lea     eax, Logos.m_name[eax*8] -> 0x02A0A7F0
+    { 0x007CB05C, 0x0000 },  // sub     edx, offset Logos -> 0x02A0A7F0
+    { 0x007CC025, 0x0000 },  // lea     edx, Logos.m_name[edx*8] -> 0x02A0A7F0
+    { 0x007CC066, 0x0000 },  // lea     eax, Logos.m_name[eax*8] -> 0x02A0A7F0
+    { 0x00DAB70C, 0x000C },  // mov     eax, offset Logos.m_name_tag_crc -> 0x02A0A7FC
+    };
+
+    const size_t Logos_Array_xref_count = sizeof(Logos_Array_xrefs) / sizeof(Logos_Array_xrefs[0]);
+
+
+    void patch_Logos_Array_references(void* new_base) {
+        for (size_t i = 0; i < Logos_Array_xref_count; i++) {
+            void* patch_addr = (void*)Logos_Array_xrefs[i].patch_location;
+            void* new_value = (void*)((uintptr_t)new_base + Logos_Array_xrefs[i].offset);
+
+            Memory::VP::Patch<void*>(patch_addr, new_value);
+            printf("Patched 0x%p -> 0x%p (offset +0x%zX)\n",
+                patch_addr, new_value, Logos_Array_xrefs[i].offset);
+        }
+    }
+
     SafetyHookInline customize_item_system_initD;
     uint32_t items_count = 0;
 
@@ -282,6 +340,16 @@ namespace CLimitAdjuster
         void* m_color_variant_groups;
     };
 
+    struct customization_logo
+    {
+        char* m_name;
+        checksum_stri m_name_checksum;
+        const wchar_t* m_display_name;
+        checksum_stri m_name_tag_crc;
+        checksum_stri m_logo_image_name_crc;
+        char* m_peg_name;
+    };
+
 
      void* SAFETYHOOK_CCALL customize_item_system_init()
     {
@@ -325,6 +393,34 @@ namespace CLimitAdjuster
              lprintf("Patching items_3d with %p count is %d\n", new_obj_items, object_info_count);
              patch_Obj_item_info_infos_references(new_obj_items);
          }
+
+
+
+
+         auto root = xtbl_parse_table_node("anim_files.xtbl", nullptr);
+         auto files = xml_find_child(root, "Files");
+         auto anim_files = xml_find_child(files, "Anim_files");
+         auto anim_files_count = xml_count_children(anim_files, "Anim_file");
+
+         lprintf("retail anim_file count = %d\n", anim_files_count);
+
+
+
+         auto root_logos = xtbl_parse_table_node("customization_logos.xtbl", nullptr);
+
+         if (root_logos)
+         {
+             auto logos_count_wanted = xml_count(root_logos, "Logo");
+             lprintf("customization_logos count %d\n", logos_count_wanted);
+
+             if ((AdjusterOptions.force_dyn || logos_count_wanted > 384) &&
+                 logos_count_wanted + 20 <= 0xFFFE)
+             {
+                 auto new_logos_array = new customization_logo[logos_count_wanted + 20];
+                 patch_Logos_Array_references(new_logos_array);
+             }
+
+         }
          xtbl_free();
          return sr2_init_stage_2D.unsafe_ccall<int>();
      }
@@ -349,6 +445,15 @@ namespace CLimitAdjuster
              ExtendedSaves::GetSerializedExtensionSize());
      }
 
+     SafetyHookInline character_initd;
+
+     void* SAFETYHOOK_CCALL character_init()
+     {
+         xtbl_free();
+
+         return character_initd.ccall<void*>();
+     }
+
     void Init()
     {
         CIniReader ini{};
@@ -364,6 +469,12 @@ namespace CLimitAdjuster
 
         static auto game_shutdown = safetyhook::create_mid(0x699BC0_g, [](SafetyHookContext& ctx) {
             FlushDebugLog();
+            });
+        static auto retarded_ai = safetyhook::create_mid(0x6EE29B, [](SafetyHookContext& ctx) {
+
+            static int count = 0;
+            count++;
+
             });
     }
 }
