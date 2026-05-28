@@ -99,6 +99,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
     </Link>
+    <PreBuildEvent>
+      <Command>"C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File "$(ProjectDir)GenerateBuildInfo.ps1" -ProjectDir "$(ProjectDir)"</Command>
+    </PreBuildEvent>
     <PostBuildEvent>
       <Command>if defined SR2_PATH (
     if not defined GITHUB_ACTIONS (
@@ -126,6 +129,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
     </Link>
+    <PreBuildEvent>
+      <Command>"C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File "$(ProjectDir)GenerateBuildInfo.ps1" -ProjectDir "$(ProjectDir)"</Command>
+    </PreBuildEvent>
     <PostBuildEvent>
       <Command>if defined SR2_PATH (
     if not defined GITHUB_ACTIONS (
@@ -151,6 +157,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
     </Link>
+    <PreBuildEvent>
+      <Command>"C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File "$(ProjectDir)GenerateBuildInfo.ps1" -ProjectDir "$(ProjectDir)"</Command>
+    </PreBuildEvent>
     <PostBuildEvent>
       <Command>if defined SR2_PATH (
     if not defined GITHUB_ACTIONS (
@@ -178,6 +187,9 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <EnableUAC>false</EnableUAC>
     </Link>
+    <PreBuildEvent>
+      <Command>"C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe" -ExecutionPolicy Bypass -File "$(ProjectDir)GenerateBuildInfo.ps1" -ProjectDir "$(ProjectDir)"</Command>
+    </PreBuildEvent>
     <PostBuildEvent>
       <Command>if defined SR2_PATH (
     if not defined GITHUB_ACTIONS (
@@ -188,6 +200,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="ExtendedSaves.h" />
+    <ClInclude Include="BuildVersion.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="include\IniReader.h" />
     <ClInclude Include="include\MemoryMgr.h" />

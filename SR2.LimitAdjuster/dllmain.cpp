@@ -1,6 +1,7 @@
 // dllmain.cpp : Defines the entry point for the DLL application.
 #include "pch.h"
 #include <safetyhook.hpp>
+#include "BuildVersion.h"
 #include "sr_xml.h"
 #include "ExtendedSaves.h"
 #include "LimitConfig.h"
@@ -515,6 +516,11 @@ namespace CLimitAdjuster
     void Init()
     {
         CIniReader ini{};
+        lprintf("Build %s | rev %u | %s%s\n",
+            BuildVersion::kBuildTimestamp,
+            BuildVersion::kGitCommitCount,
+            BuildVersion::kGitShortHash,
+            BuildVersion::kGitDirty ? " dirty" : "");
         AdjusterOptions.force_dyn = ini.ReadInteger("MAIN", "ForceEvenIfBelow", true) != 0;
         AdjusterOptions.customization_items_limit = read_count_setting(
             ini, "LIMITS", "CustomizationItems", kVanillaCustomizationItemsLimit);
