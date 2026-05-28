@@ -3,7 +3,7 @@
 #include <safetyhook.hpp>
 #include "sr_xml.h"
 #include "ExtendedSaves.h"
-#include "IniReader.h"
+#include "LimitConfig.h"
 struct vector
 {
     float x;
@@ -40,8 +40,7 @@ struct checksum_stri
 
 
 static std::mutex g_LogMutex;
-static std::vector<std::string> g_DebugLogLines;
-static bool g_DebugLogFlushed = false;
+static bool g_DebugLogInitialized = false;
 
 static std::filesystem::path GetDebugLogPath()
 {
@@ -57,6 +56,42 @@ static std::filesystem::path GetDebugLogPath()
     return std::filesystem::path("sr2_limitadjuster.txt");
 }
 
+static std::string BuildLogPrefix()
+{
+    SYSTEMTIME local_time{};
+    GetLocalTime(&local_time);
+
+    char prefix[128]{};
+    snprintf(
+        prefix,
+        sizeof(prefix),
+        "[%04u-%02u-%02u %02u:%02u:%02u.%03u][T%lu][SR2 Limit Adjuster] ",
+        local_time.wYear,
+        local_time.wMonth,
+        local_time.wDay,
+        local_time.wHour,
+        local_time.wMinute,
+        local_time.wSecond,
+        local_time.wMilliseconds,
+        GetCurrentThreadId());
+
+    return prefix;
+}
+
+static void AppendDebugLogLineLocked(const std::string& line)
+{
+    const auto path = GetDebugLogPath();
+    const auto open_mode = std::ios::out | std::ios::binary | (g_DebugLogInitialized ? std::ios::app : std::ios::trunc);
+
+    std::ofstream file(path, open_mode);
+    if (!file.is_open())
+        return;
+
+    file.write(line.data(), static_cast<std::streamsize>(line.size()));
+    file.flush();
+    g_DebugLogInitialized = true;
+}
+
 void lprintf(const char* format, ...)
 {
     if (!format)
@@ -69,31 +104,22 @@ void lprintf(const char* format, ...)
     vsnprintf(message, sizeof(message), format, args);
     va_end(args);
 
-    std::string full_message = "[SR2 Limit Adjuster] ";
+    std::string full_message = BuildLogPrefix();
     full_message += message;
+    if (full_message.empty() || full_message.back() != '\n')
+        full_message.push_back('\n');
 
     fputs(full_message.c_str(), stdout);
     fflush(stdout);
 
     std::lock_guard lock(g_LogMutex);
-    g_DebugLogLines.push_back(std::move(full_message));
+    AppendDebugLogLineLocked(full_message);
 }
 
 void FlushDebugLog()
 {
     std::lock_guard lock(g_LogMutex);
-
-    if (g_DebugLogFlushed || g_DebugLogLines.empty())
-        return;
-
-    std::ofstream file(GetDebugLogPath(), std::ios::out | std::ios::trunc | std::ios::binary);
-    if (!file.is_open())
-        return;
-
-    for (const auto& line : g_DebugLogLines)
-        file << line;
-
-    g_DebugLogFlushed = true;
+    fflush(stdout);
 }
 
 namespace CLimitAdjuster
@@ -101,6 +127,9 @@ namespace CLimitAdjuster
     struct Options
     {
         unsigned __int8 force_dyn : 1;
+        CountSetting customization_items_limit;
+        CountSetting items_3d_limit;
+        CountSetting customization_logos_limit;
 
     } AdjusterOptions;
     struct addr_xref {
@@ -355,19 +384,28 @@ namespace CLimitAdjuster
     {
          auto items = xtbl_parse_table_node("customization_items.xtbl", (void*)0x0277307C_g);
          items_count = xml_count(items, "Customization_Item");
+         const auto items_capacity = resolve_capacity(
+             "CustomizationItems",
+             AdjusterOptions.customization_items_limit,
+             items_count,
+             kVanillaCustomizationItemsLimit);
          xtbl_free();
-         if (AdjusterOptions.force_dyn || items_count > 1050) {
-             Patch<uint32_t>(0x7BF7D1 + 1, get_bytes(items_count, 32));
-             Patch<uint32_t>(0x7BF7D1 + 1, get_bytes(items_count, 32));
-             Patch<uint32_t>(0x7BF83E + 6, items_count);
-             Patch<uint32_t>(0x7BF832 + 1, items_count * 4);
-             Patch<uint32_t>(0x7BBAC6 + 1, items_count);
-             Patch<uint32_t>(0x7BCC14 + 6, items_count);
+         if (should_apply_capacity_patch(
+             AdjusterOptions.force_dyn,
+             AdjusterOptions.customization_items_limit,
+             items_capacity,
+             kVanillaCustomizationItemsLimit)) {
+             Patch<uint32_t>(0x7BF7D1 + 1, get_bytes(items_capacity, 32));
+             Patch<uint32_t>(0x7BF7D1 + 1, get_bytes(items_capacity, 32));
+             Patch<uint32_t>(0x7BF83E + 6, items_capacity);
+             Patch<uint32_t>(0x7BF832 + 1, items_capacity * 4);
+             Patch<uint32_t>(0x7BBAC6 + 1, items_capacity);
+             Patch<uint32_t>(0x7BCC14 + 6, items_capacity);
              
-             auto new_items = new customization_item[items_count];
-             lprintf("Patching customization_items with %p count is %d\n", new_items, items_count);
+             auto new_items = new customization_item[items_capacity];
+             lprintf("Patching customization_items with %p count=%u capacity=%u\n", new_items, items_count, items_capacity);
              patch_customization_item_items_references(new_items);
-         }
+          }
         return customize_item_system_initD.unsafe_ccall<void*>();
 
 
@@ -386,13 +424,22 @@ namespace CLimitAdjuster
      SafetyHookInline sr2_init_stage_2D;
      int _cdecl sr2_init_stage_2_hook()
      {
-         auto object_info = xtbl_parse_table_node("items_3d.xtbl", nullptr);
-         auto object_info_count = xml_count(object_info, "Item");
-         if (AdjusterOptions.force_dyn || object_info_count > 219) {
-             auto new_obj_items = new object_item_info[object_info_count];
-             lprintf("Patching items_3d with %p count is %d\n", new_obj_items, object_info_count);
-             patch_Obj_item_info_infos_references(new_obj_items);
-         }
+          auto object_info = xtbl_parse_table_node("items_3d.xtbl", nullptr);
+          auto object_info_count = xml_count(object_info, "Item");
+          const auto object_info_capacity = resolve_capacity(
+              "Items3D",
+              AdjusterOptions.items_3d_limit,
+              object_info_count,
+              kVanillaItems3DLimit);
+          if (should_apply_capacity_patch(
+              AdjusterOptions.force_dyn,
+              AdjusterOptions.items_3d_limit,
+              object_info_capacity,
+              kVanillaItems3DLimit)) {
+              auto new_obj_items = new object_item_info[object_info_capacity];
+              lprintf("Patching items_3d with %p count=%u capacity=%u\n", new_obj_items, object_info_count, object_info_capacity);
+              patch_Obj_item_info_infos_references(new_obj_items);
+          }
 
 
 
@@ -408,17 +455,28 @@ namespace CLimitAdjuster
 
          auto root_logos = xtbl_parse_table_node("customization_logos.xtbl", nullptr);
 
-         if (root_logos)
-         {
-             auto logos_count_wanted = xml_count(root_logos, "Logo");
-             lprintf("customization_logos count %d\n", logos_count_wanted);
+          if (root_logos)
+          {
+              auto logos_count_wanted = xml_count(root_logos, "Logo");
+              const auto logos_capacity = resolve_capacity(
+                  "CustomizationLogos",
+                  AdjusterOptions.customization_logos_limit,
+                  logos_count_wanted,
+                  kVanillaCustomizationLogosLimit,
+                  kAutoCustomizationLogoHeadroom,
+                  kMaxCustomizationLogoIndex);
+              lprintf("customization_logos count %d\n", logos_count_wanted);
 
-             if ((AdjusterOptions.force_dyn || logos_count_wanted > 384) &&
-                 logos_count_wanted + 20 <= 0xFFFE)
-             {
-                 auto new_logos_array = new customization_logo[logos_count_wanted + 20];
-                 patch_Logos_Array_references(new_logos_array);
-             }
+              if (should_apply_capacity_patch(
+                  AdjusterOptions.force_dyn,
+                  AdjusterOptions.customization_logos_limit,
+                  logos_capacity,
+                  kVanillaCustomizationLogosLimit))
+              {
+                  auto new_logos_array = new customization_logo[logos_capacity];
+                  lprintf("Patching customization_logos with %p count=%u capacity=%u\n", new_logos_array, logos_count_wanted, logos_capacity);
+                  patch_Logos_Array_references(new_logos_array);
+              }
 
          }
          xtbl_free();
@@ -458,6 +516,12 @@ namespace CLimitAdjuster
     {
         CIniReader ini{};
         AdjusterOptions.force_dyn = ini.ReadInteger("MAIN", "ForceEvenIfBelow", true) != 0;
+        AdjusterOptions.customization_items_limit = read_count_setting(
+            ini, "LIMITS", "CustomizationItems", kVanillaCustomizationItemsLimit);
+        AdjusterOptions.items_3d_limit = read_count_setting(
+            ini, "LIMITS", "Items3D", kVanillaItems3DLimit);
+        AdjusterOptions.customization_logos_limit = read_count_setting(
+            ini, "LIMITS", "CustomizationLogos", kVanillaCustomizationLogosLimit);
         ExtendedSaves::InstallHooks();
         //ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSave);
         static auto testing = safetyhook::create_mid(0x7BBA68_g, [](SafetyHookContext& ctx) {
@@ -488,10 +552,10 @@ BOOL APIENTRY DllMain( HMODULE hModule,
     {
     case DLL_PROCESS_ATTACH:
     {
+        DisableThreadLibraryCalls(hModule);
         CLimitAdjuster::Init();
+        break;
     }
-    case DLL_THREAD_ATTACH:
-    case DLL_THREAD_DETACH:
     case DLL_PROCESS_DETACH:
         FlushDebugLog();
         break;

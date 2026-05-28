@@ -78,6 +78,9 @@
     <ClInclude Include="ExtendedSaves.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="LimitConfig.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -96,6 +99,9 @@
       <Filter>include\usercaller</Filter>
     </ClCompile>
     <ClCompile Include="ExtendedSaves.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="LimitConfig.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
