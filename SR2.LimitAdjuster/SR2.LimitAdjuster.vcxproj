@@ -187,6 +187,7 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="ExtendedSaves.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="include\IniReader.h" />
     <ClInclude Include="include\MemoryMgr.h" />
@@ -205,6 +206,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="ExtendedSaves.cpp" />
     <ClCompile Include="include\safetyhook\safetyhook.cpp" />
     <ClCompile Include="include\safetyhook\Zydis.c" />
     <ClCompile Include="include\usercaller\usercaller.cpp" />

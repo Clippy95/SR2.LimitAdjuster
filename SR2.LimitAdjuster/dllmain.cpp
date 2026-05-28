@@ -2,6 +2,7 @@
 #include "pch.h"
 #include <safetyhook.hpp>
 #include "sr_xml.h"
+#include "ExtendedSaves.h"
 #include "IniReader.h"
 struct vector
 {
@@ -328,10 +329,32 @@ namespace CLimitAdjuster
          return sr2_init_stage_2D.unsafe_ccall<int>();
      }
 
+     struct MySaveData
+     {
+         int weapon_limit;
+         int owned_weapon_cap;
+     };
+
+     MySaveData data{
+    2048,
+    4096
+     };
+
+     static void OnBeforeSave(const char* save_name)
+     {
+         ExtendedSaves::SetPod("limitadjuster_state", data);
+         lprintf("OnBeforeSave %s count=%u ext=0x%X\n",
+             save_name ? save_name : "<null>",
+             ExtendedSaves::GetCurrentChunkCount(),
+             ExtendedSaves::GetSerializedExtensionSize());
+     }
+
     void Init()
     {
         CIniReader ini{};
         AdjusterOptions.force_dyn = ini.ReadInteger("MAIN", "ForceEvenIfBelow", true) != 0;
+        ExtendedSaves::InstallHooks();
+        ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSave);
         static auto testing = safetyhook::create_mid(0x7BBA68_g, [](SafetyHookContext& ctx) {
             xml_element* node = (xml_element*)ctx.eax;
             });
