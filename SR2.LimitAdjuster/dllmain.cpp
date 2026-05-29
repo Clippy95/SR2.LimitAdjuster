@@ -384,7 +384,14 @@ namespace CLimitAdjuster
      void* SAFETYHOOK_CCALL customize_item_system_init()
     {
          auto items = xtbl_parse_table_node("customization_items.xtbl", (void*)0x0277307C_g);
+         auto dlc_items = xtbl_parse_table_node("dlc_customization_items.xtbl", (void*)0x0277307C_g);
          items_count = xml_count(items, "Customization_Item");
+
+         if (dlc_items)
+         {
+             items_count += xml_count(dlc_items, "Customization_Item");
+         }
+
          const auto items_capacity = resolve_capacity(
              "CustomizationItems",
              AdjusterOptions.customization_items_limit,
