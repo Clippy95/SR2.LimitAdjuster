@@ -207,8 +207,8 @@ namespace CLimitAdjuster
             void* new_value = (void*)((uintptr_t)new_base + customization_item_items_xrefs[i].offset);
 
             Memory::VP::Patch<void*>(patch_addr, new_value);
-            printf("Patched 0x%p -> 0x%p (offset +0x%zX)\n",
-                patch_addr, new_value, customization_item_items_xrefs[i].offset);
+            //printf("Patched 0x%p -> 0x%p (offset +0x%zX)\n",
+            //    patch_addr, new_value, customization_item_items_xrefs[i].offset);
         }
     }
 
@@ -252,8 +252,8 @@ namespace CLimitAdjuster
             void* new_value = (void*)((uintptr_t)new_base + Obj_item_info_infos_xrefs[i].offset);
 
             Memory::VP::Patch<void*>(patch_addr, new_value);
-            printf("Patched 0x%p -> 0x%p (offset +0x%zX)\n",
-                patch_addr, new_value, Obj_item_info_infos_xrefs[i].offset);
+            //printf("Patched 0x%p -> 0x%p (offset +0x%zX)\n",
+            //    patch_addr, new_value, Obj_item_info_infos_xrefs[i].offset);
         }
     }
 
@@ -310,8 +310,8 @@ namespace CLimitAdjuster
             void* new_value = (void*)((uintptr_t)new_base + Logos_Array_xrefs[i].offset);
 
             Memory::VP::Patch<void*>(patch_addr, new_value);
-            printf("Patched 0x%p -> 0x%p (offset +0x%zX)\n",
-                patch_addr, new_value, Logos_Array_xrefs[i].offset);
+            //printf("Patched 0x%p -> 0x%p (offset +0x%zX)\n",
+            //    patch_addr, new_value, Logos_Array_xrefs[i].offset);
         }
     }
 
