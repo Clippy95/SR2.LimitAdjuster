@@ -8,6 +8,7 @@
 #define PCH_H
 
 // add headers that you want to pre-compile here
+#define UC_WITH_SAFETYHOOK 1
 #include "framework.h"
 
 #endif //PCH_H
