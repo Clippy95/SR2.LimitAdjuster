@@ -423,7 +423,7 @@ namespace CLimitAdjuster
      char _cdecl sr2_init_stage_1_hook()
      {
          CIniReader ini;
-         if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempool", 0) != 0)
+         if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempools", 0) != 0)
          {
              Nop(0xC00E4A, 5);
          }
@@ -553,7 +553,7 @@ namespace CLimitAdjuster
             FlushDebugLog();
             });
 
-        if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempool", 0) != 0)
+        if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempools", 0) != 0)
         {
             Mempool_init();
         }
