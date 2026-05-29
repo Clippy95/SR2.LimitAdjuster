@@ -5,6 +5,7 @@
 #include "sr_xml.h"
 #include "ExtendedSaves.h"
 #include "LimitConfig.h"
+#include "Mempool.h"
 struct vector
 {
     float x;
@@ -421,7 +422,11 @@ namespace CLimitAdjuster
      SafetyHookInline sr2_init_stage_1D;
      char _cdecl sr2_init_stage_1_hook()
      {
-
+         CIniReader ini;
+         if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempool", 0) != 0)
+         {
+             Nop(0xC00E4A, 5);
+         }
          Patch<uint32_t>(0x51EE12 + 1, 737280 * 2);
          Patch<uint32_t>(0x51EE50 + 1, 737280 * 2);
 
@@ -547,12 +552,11 @@ namespace CLimitAdjuster
         static auto game_shutdown = safetyhook::create_mid(0x699BC0_g, [](SafetyHookContext& ctx) {
             FlushDebugLog();
             });
-        static auto retarded_ai = safetyhook::create_mid(0x6EE29B, [](SafetyHookContext& ctx) {
 
-            static int count = 0;
-            count++;
-
-            });
+        if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempool", 0) != 0)
+        {
+            Mempool_init();
+        }
     }
 }
 
