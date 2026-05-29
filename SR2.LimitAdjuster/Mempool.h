@@ -55,7 +55,11 @@ namespace CLimitAdjuster
 		int end_pool_used;
 		int end_pool_used_mark;
 	};
-
+	struct string_pool : mempool
+	{
+		int number_of_strings;
+		int mark_number_of_strings;
+	};
 	struct DynamicMempoolConfig
 	{
 		uint32_t reserve_size = 0;

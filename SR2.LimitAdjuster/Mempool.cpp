@@ -4,6 +4,7 @@
 #include <array>
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -12,6 +13,9 @@
 
 #include "include/MemoryMgr.h"
 #include "Mempool.h"
+#include <IniReader.h>
+#include <usercaller.hpp>
+#include <safetyhook_inline.hpp>
 
 void lprintf(const char* format, ...);
 
@@ -51,6 +55,8 @@ namespace CLimitAdjuster
 
 		std::recursive_mutex g_dynamic_pool_mutex;
 		std::unordered_map<static_mempool_base*, dynamic_pool_state> g_dynamic_pools;
+		std::mutex g_string_pool_fallback_mutex;
+		std::unordered_map<std::string, std::unique_ptr<char[]>> g_string_pool_fallbacks;
 		std::once_flag g_effects_cpu_alloc_failure_popup_once;
 		std::array<inline_hook_slot, 2> g_can_alloc_hooks{};
 		std::array<inline_hook_slot, 2> g_alloc_hooks{};
@@ -74,6 +80,39 @@ namespace CLimitAdjuster
 		uintptr_t g_static_pad_to_page_target = 0;
 		uint32_t g_page_size = 0x1000;
 		bool g_mempool_hooks_installed = false;
+
+		std::string make_ascii_lowercase_key(const char* string)
+		{
+			if (!string)
+				return {};
+
+			std::string key(string);
+			for (char& ch : key)
+			{
+				if (ch >= 'A' && ch <= 'Z')
+					ch = static_cast<char>(ch - 'A' + 'a');
+			}
+			return key;
+		}
+
+		const char* get_or_create_string_pool_fallback(const char* string)
+		{
+			if (!string || !string[0])
+				return string;
+
+			const auto key = make_ascii_lowercase_key(string);
+			std::scoped_lock lock(g_string_pool_fallback_mutex);
+
+			if (const auto it = g_string_pool_fallbacks.find(key); it != g_string_pool_fallbacks.end())
+				return it->second.get();
+
+			const auto length = std::strlen(string);
+			auto copy = std::make_unique<char[]>(length + 1);
+			std::memcpy(copy.get(), string, length + 1);
+			const char* result = copy.get();
+			g_string_pool_fallbacks.emplace(key, std::move(copy));
+			return result;
+		}
 
 		uint32_t align_up(uint32_t value, uint32_t alignment)
 		{
@@ -1082,8 +1121,43 @@ namespace CLimitAdjuster
 		return register_pool_locked(pool, &config);
 	}
 
+	using string_pool_add_unique_base_abi = uc::abi<
+		uc::eax_ret<char*>,
+		uc::eax_arg<string_pool*>,
+		uc::stack_arg<const char*>
+	>;
+
+
+
+	static uc::inline_hook_callee<string_pool_add_unique_base_abi> string_pool_add_unique_hook;
+
+	char* SAFETYHOOK_CCALL string_pool_add_unqiue_detour(string_pool* thisa, const char* string)
+	{
+		auto result = string_pool_add_unique_hook.unsafe_call_original(thisa, string);
+		if (!result)
+		{
+			auto fallback = const_cast<char*>(get_or_create_string_pool_fallback(string));
+			MEMPOOL_LOG("string_pool::add_unique fallback this=%p src=%s result=%p\n",
+				thisa,
+				string ? string : "<null>",
+				fallback);
+			return fallback;
+		}
+		return result;
+	}
+
 	void Mempool_init()
 	{
+		CIniReader ini;
+
+		if (ini.ReadInteger("EXPERIMENTAL", "DynamicStringMempools", 1))
+		{
+			string_pool_add_unique_hook.create(0xC06EE0_g, string_pool_add_unqiue_detour);
+		}
+
+		if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempools", 0) == 0)
+			return;
+
 		if (g_mempool_hooks_installed)
 			return;
 

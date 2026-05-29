@@ -553,10 +553,9 @@ namespace CLimitAdjuster
             FlushDebugLog();
             });
 
-        if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempools", 0) != 0)
-        {
+
             Mempool_init();
-        }
+        
     }
 }
 
