@@ -1111,8 +1111,6 @@ namespace CLimitAdjuster
 	{
 		if (!pool)
 			return false;
-
-		Mempool_init();
 		std::scoped_lock lock(g_dynamic_pool_mutex);
 		const auto pool_name = get_pool_name(pool);
 		MEMPOOL_LOG("RegisterGrowableMempool pool=%p name=%s\n",
