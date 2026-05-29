@@ -333,52 +333,52 @@ namespace CLimitAdjuster
         char pad[100];
     };
 
-    struct  object_item_info
+    struct object_item_info
     {
-        char* name;
-        checksum_stri name_checksum;
-        char* mesh_name;
-        bool preloaded;
-        bool large_prop;
-        bool no_anim_prop_attach;
-        const wchar_t* display_name;
-        void* mesh;
-        int primary_handle_tag_index;
-        float mass;
-        float linear_damping;
-        float angular_damping;
-        float restitution;
-        float friction;
-        vector angular_velocity;
-        int respawn_delay;
-        float render_scale;
-        bool scale_ambient;
-        void* function;
-        int flags;
-        unsigned __int16 m_pickup_snd_id;
-        unsigned __int16 m_foley_collision_id;
-        timestamp next_pickup_time;
-        timestamp next_coll_time;
-        int num_collectible_needed;
-        int num_collectible_gotten;
-        int collectible_index;
-        int glow_type;
-        int m_num_lods;
-        float m_lod_info[4];
-        int wieldable_type;
-        float wieldable_damage;
-        int m_num_color_variant_groups;
-        void* m_color_variant_groups;
+        char* NAME;
+        checksum_stri NAME_CRC;
+        char* MESH_NAME;
+        bool PRELOADED;
+        bool LARGE_PROP;
+        bool NO_ANIM_ATTACH;
+        const wchar_t* DISPLAY_NAME;
+        void* MESH;
+        int HANDLE_TAG;
+        float MASS;
+        float LINEAR_DAMP;
+        float ANGULAR_DAMP;
+        float RESTITUTION;
+        float FRICTION;
+        vector ANGULAR_VEL;
+        int RESPAWN_DELAY;
+        float RENDER_SCALE;
+        bool SCALE_AMBIENT;
+        void* FUNC;
+        int FLAGS;
+        unsigned __int16 PICKUP_SND_ID;
+        unsigned __int16 FOLEY_COLL_ID;
+        timestamp NEXT_PICKUP_TIME;
+        timestamp NEXT_COLL_TIME;
+        int COLLECTIBLE_NEED;
+        int COLLECTIBLE_HAVE;
+        int COLLECTIBLE_INDEX;
+        int GLOW_TYPE;
+        int NUM_LODS;
+        float LOD_INFO[4];
+        int WIELD_TYPE;
+        float WIELD_DAMAGE;
+        int NUM_COLOR_GROUPS;
+        void* COLOR_GROUPS;
     };
 
     struct customization_logo
     {
-        char* m_name;
-        checksum_stri m_name_checksum;
-        const wchar_t* m_display_name;
-        checksum_stri m_name_tag_crc;
-        checksum_stri m_logo_image_name_crc;
-        char* m_peg_name;
+        char* NAME;
+        checksum_stri NAME_CRC;
+        const wchar_t* DISPLAY_NAME;
+        checksum_stri NAME_TAG_CRC;
+        checksum_stri IMAGE_CRC;
+        char* PEG_NAME;
     };
 
 
