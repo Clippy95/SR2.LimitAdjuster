@@ -49,16 +49,28 @@ namespace CLimitAdjuster
 			SafetyHookInline hook{};
 		};
 
-		std::mutex g_dynamic_pool_mutex;
+		std::recursive_mutex g_dynamic_pool_mutex;
 		std::unordered_map<static_mempool_base*, dynamic_pool_state> g_dynamic_pools;
 		std::once_flag g_effects_cpu_alloc_failure_popup_once;
 		std::array<inline_hook_slot, 2> g_can_alloc_hooks{};
 		std::array<inline_hook_slot, 2> g_alloc_hooks{};
 		std::array<inline_hook_slot, 2> g_realloc_hooks{};
+		std::array<inline_hook_slot, 2> g_contains_address_hooks{};
+		std::array<inline_hook_slot, 2> g_clear_hooks{};
+		std::array<inline_hook_slot, 2> g_get_base_hooks{};
+		std::array<inline_hook_slot, 2> g_mark_hooks{};
+		std::array<inline_hook_slot, 2> g_restore_to_mark_hooks{};
+		std::array<inline_hook_slot, 2> g_release_bytes_hooks{};
 		std::array<inline_hook_slot, 2> g_pad_to_page_hooks{};
 		uintptr_t g_static_can_alloc_target = 0;
 		uintptr_t g_static_alloc_target = 0;
 		uintptr_t g_static_realloc_target = 0;
+		uintptr_t g_static_contains_address_target = 0;
+		uintptr_t g_static_clear_target = 0;
+		uintptr_t g_static_get_base_target = 0;
+		uintptr_t g_static_mark_target = 0;
+		uintptr_t g_static_restore_to_mark_target = 0;
+		uintptr_t g_static_release_bytes_target = 0;
 		uintptr_t g_static_pad_to_page_target = 0;
 		uint32_t g_page_size = 0x1000;
 		bool g_mempool_hooks_installed = false;
@@ -505,6 +517,74 @@ namespace CLimitAdjuster
 			return managed_alloc_locked(pool, padding, 1) != nullptr;
 		}
 
+		bool managed_contains_address_locked(const static_mempool_base* pool, const void* addr)
+		{
+			if (!pool || !pool->start_of_pool || !addr)
+				return false;
+
+			const auto begin = reinterpret_cast<uintptr_t>(pool->start_of_pool);
+			const auto end = begin + static_cast<uint32_t>(pool->max_pool_size);
+			const auto value = reinterpret_cast<uintptr_t>(addr);
+			return value >= begin && value < end;
+		}
+
+		bool managed_clear_locked(static_mempool_base* pool)
+		{
+			if (!pool)
+				return false;
+
+			pool->pool_used = 0;
+			pool->pool_used_mark = 0;
+			pool->last_allocation = nullptr;
+			return true;
+		}
+
+		void* managed_get_base_locked(static_mempool_base* pool)
+		{
+			return pool ? pool->start_of_pool : nullptr;
+		}
+
+		unsigned int managed_mark_locked(static_mempool_base* pool)
+		{
+			if (!pool)
+				return 0;
+
+			pool->pool_used_mark = pool->pool_used;
+			return static_cast<unsigned int>(pool->pool_used_mark);
+		}
+
+		bool managed_restore_to_mark_locked(static_mempool_base* pool, unsigned int mark)
+		{
+			if (!pool)
+				return false;
+
+			if (mark == 0xFFFFFFFFu)
+				mark = static_cast<unsigned int>(pool->pool_used_mark);
+
+			if (mark > static_cast<uint32_t>(pool->max_pool_size))
+				return false;
+
+			pool->pool_used = static_cast<int>(mark);
+			pool->pool_used_mark = static_cast<int>(mark);
+			pool->last_allocation = mark ? (static_cast<uint8_t*>(pool->start_of_pool) + mark) : nullptr;
+			return true;
+		}
+
+		bool managed_release_bytes_locked(static_mempool_base* pool, unsigned int bytes)
+		{
+			if (!pool)
+				return false;
+
+			const uint32_t used = static_cast<uint32_t>(pool->pool_used);
+			if (bytes > used)
+				return false;
+
+			const int saved_mark = pool->pool_used_mark;
+			const bool result = managed_restore_to_mark_locked(pool, used - bytes);
+			pool->pool_used_mark = saved_mark;
+			return result;
+		}
+
 		void show_effects_cpu_alloc_failure_popup(
 			static_mempool_base* pool,
 			uintptr_t target,
@@ -798,6 +878,130 @@ namespace CLimitAdjuster
 		return result;
 	}
 
+	bool SAFETYHOOK_FASTCALL static_mempool_contains_address(static_mempool_base* thisa, void* unused, void* addr)
+	{
+		const auto target = g_static_contains_address_target;
+		const auto pool_name = get_pool_name(thisa);
+		if (!target)
+			return false;
+
+		std::scoped_lock lock(g_dynamic_pool_mutex);
+		if (is_pool_managed_locked(thisa))
+		{
+			const auto result = managed_contains_address_locked(thisa, addr);
+			MEMPOOL_LOG("HOOK contains_address managed result this=%p name=%s addr=%p result=%d\n",
+				thisa,
+				pool_name.empty() ? "<invalid>" : pool_name.c_str(),
+				addr,
+				result ? 1 : 0);
+			return result;
+		}
+
+		return call_inline_original_thiscall<bool>(g_contains_address_hooks, target, thisa, addr);
+	}
+
+	bool SAFETYHOOK_FASTCALL static_mempool_clear(static_mempool_base* thisa, void* unused)
+	{
+		const auto target = g_static_clear_target;
+		const auto pool_name = get_pool_name(thisa);
+		if (!target)
+			return false;
+
+		std::scoped_lock lock(g_dynamic_pool_mutex);
+		if (is_pool_managed_locked(thisa))
+		{
+			const auto result = managed_clear_locked(thisa);
+			MEMPOOL_LOG("HOOK clear managed result this=%p name=%s result=%d\n",
+				thisa,
+				pool_name.empty() ? "<invalid>" : pool_name.c_str(),
+				result ? 1 : 0);
+			return result;
+		}
+
+		return call_inline_original_thiscall<bool>(g_clear_hooks, target, thisa);
+	}
+
+	void* SAFETYHOOK_FASTCALL static_mempool_get_base(static_mempool_base* thisa, void* unused)
+	{
+		const auto target = g_static_get_base_target;
+		if (!target)
+			return nullptr;
+
+		std::scoped_lock lock(g_dynamic_pool_mutex);
+		if (is_pool_managed_locked(thisa))
+			return managed_get_base_locked(thisa);
+
+		return call_inline_original_thiscall<void*>(g_get_base_hooks, target, thisa);
+	}
+
+	unsigned int SAFETYHOOK_FASTCALL static_mempool_mark(static_mempool_base* thisa, void* unused)
+	{
+		const auto target = g_static_mark_target;
+		const auto pool_name = get_pool_name(thisa);
+		if (!target)
+			return 0;
+
+		std::scoped_lock lock(g_dynamic_pool_mutex);
+		if (is_pool_managed_locked(thisa))
+		{
+			const auto result = managed_mark_locked(thisa);
+			MEMPOOL_LOG("HOOK mark managed result this=%p name=%s result=0x%X\n",
+				thisa,
+				pool_name.empty() ? "<invalid>" : pool_name.c_str(),
+				result);
+			return result;
+		}
+
+		return call_inline_original_thiscall<unsigned int>(g_mark_hooks, target, thisa);
+	}
+
+	bool SAFETYHOOK_FASTCALL static_mempool_restore_to_mark(static_mempool_base* thisa, void* unused, unsigned int mark)
+	{
+		const auto target = g_static_restore_to_mark_target;
+		const auto pool_name = get_pool_name(thisa);
+		if (!target)
+			return false;
+
+		std::scoped_lock lock(g_dynamic_pool_mutex);
+		if (is_pool_managed_locked(thisa))
+		{
+			const auto result = managed_restore_to_mark_locked(thisa, mark);
+			MEMPOOL_LOG("HOOK restore_to_mark managed result this=%p name=%s mark=0x%X result=%d used=0x%X\n",
+				thisa,
+				pool_name.empty() ? "<invalid>" : pool_name.c_str(),
+				mark,
+				result ? 1 : 0,
+				thisa ? thisa->pool_used : 0);
+			return result;
+		}
+
+		return call_inline_original_thiscall<bool>(g_restore_to_mark_hooks, target, thisa, mark);
+	}
+
+	bool SAFETYHOOK_FASTCALL static_mempool_release_bytes(static_mempool_base* thisa, void* unused, unsigned int bytes)
+	{
+		const auto target = g_static_release_bytes_target;
+		const auto pool_name = get_pool_name(thisa);
+		if (!target)
+			return false;
+
+		std::scoped_lock lock(g_dynamic_pool_mutex);
+		if (is_pool_managed_locked(thisa))
+		{
+			const auto result = managed_release_bytes_locked(thisa, bytes);
+			MEMPOOL_LOG("HOOK release_bytes managed result this=%p name=%s bytes=0x%X result=%d used=0x%X mark=0x%X\n",
+				thisa,
+				pool_name.empty() ? "<invalid>" : pool_name.c_str(),
+				bytes,
+				result ? 1 : 0,
+				thisa ? thisa->pool_used : 0,
+				thisa ? thisa->pool_used_mark : 0);
+			return result;
+		}
+
+		return call_inline_original_thiscall<bool>(g_release_bytes_hooks, target, thisa, bytes);
+	}
+
 	bool SAFETYHOOK_FASTCALL static_mempool_pad_to_page(static_mempool_base* thisa, void* unused, unsigned int alignment)
 	{
 		const auto target = g_static_pad_to_page_target;
@@ -894,20 +1098,38 @@ namespace CLimitAdjuster
 		g_static_can_alloc_target = reinterpret_cast<uintptr_t>(read_vtable_entry<void*>(static_vtable, 7));
 		g_static_alloc_target = reinterpret_cast<uintptr_t>(read_vtable_entry<void*>(static_vtable, 8));
 		g_static_realloc_target = reinterpret_cast<uintptr_t>(read_vtable_entry<void*>(static_vtable, 9));
+		g_static_contains_address_target = reinterpret_cast<uintptr_t>(read_vtable_entry<void*>(static_vtable, 10));
+		g_static_clear_target = reinterpret_cast<uintptr_t>(read_vtable_entry<void*>(static_vtable, 11));
+		g_static_get_base_target = reinterpret_cast<uintptr_t>(read_vtable_entry<void*>(static_vtable, 12));
+		g_static_mark_target = reinterpret_cast<uintptr_t>(read_vtable_entry<void*>(static_vtable, 13));
+		g_static_restore_to_mark_target = reinterpret_cast<uintptr_t>(read_vtable_entry<void*>(static_vtable, 14));
+		g_static_release_bytes_target = reinterpret_cast<uintptr_t>(read_vtable_entry<void*>(static_vtable, 15));
 		g_static_pad_to_page_target = reinterpret_cast<uintptr_t>(read_vtable_entry<void*>(static_vtable, 16));
 
 		install_deduped_inline_hook(g_can_alloc_hooks, g_static_can_alloc_target, static_mempool_base_can_alloc, "static_mempool_base::can_alloc");
 		install_deduped_inline_hook(g_alloc_hooks, g_static_alloc_target, static_mempool_base_alloc, "static_mempool_base::alloc");
 		install_deduped_inline_hook(g_realloc_hooks, g_static_realloc_target, static_mempool_base_realloc, "static_mempool_base::realloc");
+		install_deduped_inline_hook(g_contains_address_hooks, g_static_contains_address_target, static_mempool_contains_address, "static_mempool_base::contains_address");
+		install_deduped_inline_hook(g_clear_hooks, g_static_clear_target, static_mempool_clear, "static_mempool_base::clear");
+		install_deduped_inline_hook(g_get_base_hooks, g_static_get_base_target, static_mempool_get_base, "static_mempool_base::get_base");
+		install_deduped_inline_hook(g_mark_hooks, g_static_mark_target, static_mempool_mark, "static_mempool_base::mark");
+		install_deduped_inline_hook(g_restore_to_mark_hooks, g_static_restore_to_mark_target, static_mempool_restore_to_mark, "static_mempool_base::restore_to_mark");
+		install_deduped_inline_hook(g_release_bytes_hooks, g_static_release_bytes_target, static_mempool_release_bytes, "static_mempool_base::release_bytes");
 		install_deduped_inline_hook(g_pad_to_page_hooks, g_static_pad_to_page_target, static_mempool_pad_to_page, "static_mempool_base::pad_to_page");
 
 		g_mempool_hooks_installed = true;
-		MEMPOOL_LOG("Installed inline mempool hooks: static_vft=%p mempool_vft=%p page=0x%X alloc=%p realloc=%p pad=%p\n",
+		MEMPOOL_LOG("Installed inline mempool hooks: static_vft=%p mempool_vft=%p page=0x%X alloc=%p realloc=%p contains=%p clear=%p get_base=%p mark=%p restore=%p release=%p pad=%p\n",
 			reinterpret_cast<void*>(static_vtable),
 			reinterpret_cast<void*>(mempool_vtable),
 			g_page_size,
 			reinterpret_cast<void*>(g_static_alloc_target),
 			reinterpret_cast<void*>(g_static_realloc_target),
+			reinterpret_cast<void*>(g_static_contains_address_target),
+			reinterpret_cast<void*>(g_static_clear_target),
+			reinterpret_cast<void*>(g_static_get_base_target),
+			reinterpret_cast<void*>(g_static_mark_target),
+			reinterpret_cast<void*>(g_static_restore_to_mark_target),
+			reinterpret_cast<void*>(g_static_release_bytes_target),
 			reinterpret_cast<void*>(g_static_pad_to_page_target));
 	}
 }
