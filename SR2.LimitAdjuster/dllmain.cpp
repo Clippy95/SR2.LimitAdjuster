@@ -453,18 +453,7 @@ namespace CLimitAdjuster
               lprintf("Patching items_3d with %p count=%u capacity=%u\n", new_obj_items, object_info_count, object_info_capacity);
               patch_Obj_item_info_infos_references(new_obj_items);
           }
-
-
-
-
-         auto root = xtbl_parse_table_node("anim_files.xtbl", nullptr);
-         auto files = xml_find_child(root, "Files");
-         auto anim_files = xml_find_child(files, "Anim_files");
-         auto anim_files_count = xml_count_children(anim_files, "Anim_file");
-
-         lprintf("retail anim_file count = %d\n", anim_files_count);
-
-
+          xtbl_free();
 
          auto root_logos = xtbl_parse_table_node("customization_logos.xtbl", nullptr);
 
