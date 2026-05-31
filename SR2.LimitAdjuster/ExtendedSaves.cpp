@@ -66,6 +66,7 @@ namespace ExtendedSaves
         static uc::inline_hook<SaveWriterAbi> g_SaveWriterHook;
         static uc::inline_hook<SaveLoaderAbi> g_SaveLoaderHook;
         static bool g_HooksInstalled = false;
+        static bool g_LoadInProgress = false;
 
         std::filesystem::path BuildSavePath(const char* save_name)
         {
@@ -340,15 +341,18 @@ namespace ExtendedSaves
         bool UC_CDECL SaveLoaderHook(void** save_game_ptr, const char* save_name)
         {
             const bool has_extension = PreloadSaveExtension(save_name);
+            g_LoadInProgress = has_extension;
             const bool result = g_SaveLoaderHook.call_original(save_game_ptr, save_name);
             if (!result || !save_game_ptr || !*save_game_ptr)
             {
+                g_LoadInProgress = false;
                 Clear();
                 RunAfterLoadCallbacks(save_name, false);
                 return result;
             }
 
             RunAfterLoadCallbacks(save_name, has_extension);
+            g_LoadInProgress = false;
             return result;
         }
     }
@@ -486,5 +490,10 @@ namespace ExtendedSaves
 
         const auto bytes = BuildSerializedExtensionLocked();
         return static_cast<std::uint32_t>(bytes.size());
+    }
+
+    bool IsLoadInProgress()
+    {
+        return g_LoadInProgress;
     }
 }

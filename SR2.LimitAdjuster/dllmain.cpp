@@ -37,7 +37,7 @@ SAFETYHOOK_NOINLINE void xtbl_free()
 
 struct checksum_stri
 {
-    unsigned int checksum = -1;
+    int checksum = -1;
 };
 
 class __declspec(align(4)) bit_array
@@ -441,16 +441,17 @@ namespace CLimitAdjuster
         char* PEG_NAME;
     };
 
+
+
+#pragma pack(push, 1)
     struct unlockable_item
     {
         checksum_stri checksum;
-        char pad0[0xC0];
+        char padding[0xC0];
         bool is_unlocked;
         bool dlc_start_unlocked;
-        char pad1[7];
+        char unk[0xA];
     };
-
-#pragma pack(push, 1)
     struct unlockables_ext_header
     {
         uint32_t count;
@@ -528,7 +529,8 @@ namespace CLimitAdjuster
 
     void __cdecl unlockable_load_hook(bit_array* array)
     {
-        if (ExtendedSaves::HasChunk(ExtendedSaves::MakeTag(kUnlockablesExtChunkName)))
+        if (ExtendedSaves::IsLoadInProgress()
+            && ExtendedSaves::HasChunk(ExtendedSaves::MakeTag(kUnlockablesExtChunkName)))
         {
             lprintf("UnlockablesExt: skipping vanilla unlockable_load because checksum chunk is present.\n");
             return;
@@ -605,7 +607,7 @@ namespace CLimitAdjuster
               AdjusterOptions.items_3d_limit,
               object_info_capacity,
               kVanillaItems3DLimit)) {
-              auto new_obj_items = new object_item_info[object_info_capacity];
+              auto new_obj_items = new object_item_info[object_info_capacity]{};
               lprintf("Patching items_3d with %p count=%u capacity=%u\n", new_obj_items, object_info_count, object_info_capacity);
               patch_Obj_item_info_infos_references(new_obj_items);
           }
@@ -631,7 +633,7 @@ namespace CLimitAdjuster
                   logos_capacity,
                   kVanillaCustomizationLogosLimit))
               {
-                  auto new_logos_array = new customization_logo[logos_capacity];
+                  auto new_logos_array = new customization_logo[logos_capacity]{};
                   lprintf("Patching customization_logos with %p count=%u capacity=%u\n", new_logos_array, logos_count_wanted, logos_capacity);
                   patch_Logos_Array_references(new_logos_array);
               }
@@ -664,7 +666,7 @@ namespace CLimitAdjuster
                  unlockables_capacity,
                  150))
              {
-                 new_unlockables_array = new unlockable_item[unlockables_capacity] ;
+                 new_unlockables_array = new unlockable_item[unlockables_capacity]{};
                  lprintf("Patching customization_logos with %p count=%u capacity=%u\n", new_unlockables_array, unlockables_count, unlockables_capacity);
                  patch_Unlockables_Array_references(new_unlockables_array);
                  Patch<size_t>(0x6BC990 + 1, unlockables_capacity);
@@ -769,7 +771,7 @@ namespace CLimitAdjuster
          }
 
          unlockable_load(&array);
-         replay_dlc_unlock_side_effects();
+         //replay_dlc_unlock_side_effects();
          lprintf("UnlockablesExt: loaded %u unlockables for %s (%u missing checksums)\n",
              applied_count,
              save_name ? save_name : "<null>",

@@ -44,6 +44,7 @@ namespace ExtendedSaves
 
     std::uint32_t GetCurrentChunkCount();
     std::uint32_t GetSerializedExtensionSize();
+    bool IsLoadInProgress();
 
     template <typename T>
     const T* GetPod(std::uint32_t tag)
