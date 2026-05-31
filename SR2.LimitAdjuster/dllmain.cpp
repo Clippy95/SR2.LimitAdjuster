@@ -47,6 +47,44 @@ public:
     unsigned __int8* mem;
     unsigned int size;
     bool is_allocated;
+
+    static bit_array from_storage(void* storage, unsigned int bytes)
+    {
+        return bit_array{
+            static_cast<unsigned __int8*>(storage),
+            bytes,
+            false
+        };
+    }
+
+    static bit_array from_bit_count(void* storage, unsigned int bit_count)
+    {
+        return from_storage(storage, (bit_count + 7u) / 8u);
+    }
+
+    unsigned int byte_count() const
+    {
+        return size;
+    }
+
+    unsigned int bit_capacity() const
+    {
+        return size * 8u;
+    }
+
+    bool has_bit(unsigned int bit_index) const
+    {
+        return mem && bit_index < bit_capacity();
+    }
+
+    bool set_bit(unsigned int bit_index)
+    {
+        if (!has_bit(bit_index))
+            return false;
+
+        mem[bit_index / 8u] |= static_cast<unsigned __int8>(1u << (bit_index % 8u));
+        return true;
+    }
 };
 
 
@@ -684,6 +722,12 @@ namespace CLimitAdjuster
         uint8_t unlocked;
         uint8_t reserved[3];
     };
+
+    struct checksum_lookup_entry
+    {
+        uint32_t checksum;
+        uint8_t enabled;
+    };
 #pragma pack(pop)
 
     uint32_t* Num_unlockable_items = (uint32_t*)0x0145A29C_g;
@@ -862,65 +906,130 @@ namespace CLimitAdjuster
         return g_active_extended_misc_unlockables_load && ExtendedSaves::HasChunk(tag);
     }
 
-    bool apply_unlockables_ext_from_chunk(const char* save_name)
+    template <typename Header, typename Entry>
+    std::vector<uint8_t> build_ext_payload(const Header& header, const std::vector<Entry>& entries)
     {
-        auto chunk = ExtendedSaves::GetChunk(kUnlockablesExtChunkName);
-        if (!chunk)
-            return false;
+        std::vector<uint8_t> payload(
+            sizeof(Header) + (sizeof(Entry) * entries.size()),
+            0);
 
-        if (chunk.version != kUnlockablesExtChunkVersion || chunk.size < sizeof(unlockables_ext_header))
+        memcpy(payload.data(), &header, sizeof(Header));
+        if (!entries.empty())
         {
-            lprintf("UnlockablesExt: ignoring invalid chunk for %s (version=%u size=%u)\n",
+            memcpy(
+                payload.data() + sizeof(Header),
+                entries.data(),
+                sizeof(Entry) * entries.size());
+        }
+
+        return payload;
+    }
+
+    template <typename Header, typename Entry>
+    const Entry* get_valid_ext_entries(
+        const char* chunk_name,
+        uint32_t expected_version,
+        const char* save_name,
+        const Header*& header_out,
+        uint32_t& entry_count_out)
+    {
+        const auto chunk = ExtendedSaves::GetChunk(chunk_name);
+        if (!chunk)
+            return nullptr;
+
+        if (chunk.version != expected_version || chunk.size < sizeof(Header))
+        {
+            lprintf("%s: ignoring invalid chunk for %s (version=%u size=%u)\n",
+                chunk_name,
                 save_name ? save_name : "<null>",
                 chunk.version,
                 chunk.size);
-            return false;
+            return nullptr;
         }
 
-        const auto* header = reinterpret_cast<const unlockables_ext_header*>(chunk.data);
-        const auto expected_size = sizeof(unlockables_ext_header) + (sizeof(unlockables_ext_entry) * header->count);
+        const auto* header = reinterpret_cast<const Header*>(chunk.data);
+        const auto expected_size = sizeof(Header) + (sizeof(Entry) * header->count);
         if (chunk.size != expected_size)
         {
-            lprintf("UnlockablesExt: ignoring malformed chunk for %s (count=%u size=%u expected=%u)\n",
+            lprintf("%s: ignoring malformed chunk for %s (count=%u size=%u expected=%u)\n",
+                chunk_name,
                 save_name ? save_name : "<null>",
                 header->count,
                 chunk.size,
                 static_cast<uint32_t>(expected_size));
-            return false;
+            return nullptr;
         }
 
-        auto current_count = get_unlockables_count();
-        std::vector<uint8_t> bit_storage((current_count + 7) / 8, 0);
-        bit_array array{
-            bit_storage.data(),
-            static_cast<unsigned int>(bit_storage.size()),
-            false
-        };
+        header_out = header;
+        entry_count_out = header->count;
+        return reinterpret_cast<const Entry*>(chunk.data + sizeof(Header));
+    }
 
-        const auto* entries = reinterpret_cast<const unlockables_ext_entry*>(chunk.data + sizeof(unlockables_ext_header));
+    template <typename FindIndexFn>
+    uint32_t populate_bit_array_from_checksum_entries(
+        bit_array& array,
+        const checksum_lookup_entry* entries,
+        uint32_t entry_count,
+        FindIndexFn&& find_index,
+        uint32_t& missing_count)
+    {
         uint32_t applied_count = 0;
-        uint32_t missing_count = 0;
+        missing_count = 0;
 
-        for (uint32_t i = 0; i < header->count; i++)
+        for (uint32_t i = 0; i < entry_count; i++)
         {
-            if (!entries[i].unlocked)
+            if (!entries[i].enabled)
                 continue;
 
-            const int index = find_unlockable_index_by_checksum(entries[i].checksum);
+            const int index = find_index(entries[i].checksum);
             if (index < 0)
             {
                 missing_count++;
                 continue;
             }
 
-            const uint32_t byte_index = static_cast<uint32_t>(index) / 8;
-            const uint32_t bit_index = static_cast<uint32_t>(index) % 8;
-            if (byte_index >= bit_storage.size())
+            if (!array.set_bit(static_cast<uint32_t>(index)))
                 continue;
 
-            bit_storage[byte_index] |= static_cast<uint8_t>(1u << bit_index);
             applied_count++;
         }
+
+        return applied_count;
+    }
+
+    bool apply_unlockables_ext_from_chunk(const char* save_name)
+    {
+        const unlockables_ext_header* header = nullptr;
+        uint32_t entry_count = 0;
+        const auto* raw_entries = get_valid_ext_entries<unlockables_ext_header, unlockables_ext_entry>(
+            kUnlockablesExtChunkName,
+            kUnlockablesExtChunkVersion,
+            save_name,
+            header,
+            entry_count);
+        if (!raw_entries)
+            return false;
+
+        auto current_count = get_unlockables_count();
+        std::vector<uint8_t> bit_storage((current_count + 7) / 8, 0);
+        auto array = bit_array::from_storage(bit_storage.data(), static_cast<unsigned int>(bit_storage.size()));
+        std::vector<checksum_lookup_entry> entries(entry_count);
+        for (uint32_t i = 0; i < entry_count; i++)
+        {
+            entries[i].checksum = raw_entries[i].checksum;
+            entries[i].enabled = raw_entries[i].unlocked;
+        }
+
+        uint32_t missing_count = 0;
+        const auto applied_count = populate_bit_array_from_checksum_entries(
+            array,
+            entries.data(),
+            entry_count,
+            [](uint32_t checksum)
+            {
+                return find_unlockable_index_by_checksum(checksum);
+            },
+            missing_count);
 
         unlockable_load(&array);
         lprintf("UnlockablesExt: loaded %u unlockables for %s (%u missing checksums)\n",
@@ -932,30 +1041,16 @@ namespace CLimitAdjuster
 
     bool apply_crib_weapons_ext_from_chunk(const char* save_name)
     {
-        auto chunk = ExtendedSaves::GetChunk(kCribWeaponsExtChunkName);
-        if (!chunk)
+        const crib_weapons_ext_header* header = nullptr;
+        uint32_t entry_count = 0;
+        const auto* raw_entries = get_valid_ext_entries<crib_weapons_ext_header, crib_weapons_ext_entry>(
+            kCribWeaponsExtChunkName,
+            kCribWeaponsExtChunkVersion,
+            save_name,
+            header,
+            entry_count);
+        if (!raw_entries)
             return false;
-
-        if (chunk.version != kCribWeaponsExtChunkVersion || chunk.size < sizeof(crib_weapons_ext_header))
-        {
-            lprintf("CribWeaponsExt: ignoring invalid chunk for %s (version=%u size=%u)\n",
-                save_name ? save_name : "<null>",
-                chunk.version,
-                chunk.size);
-            return false;
-        }
-
-        const auto* header = reinterpret_cast<const crib_weapons_ext_header*>(chunk.data);
-        const auto expected_size = sizeof(crib_weapons_ext_header) + (sizeof(crib_weapons_ext_entry) * header->count);
-        if (chunk.size != expected_size)
-        {
-            lprintf("CribWeaponsExt: ignoring malformed chunk for %s (count=%u size=%u expected=%u)\n",
-                save_name ? save_name : "<null>",
-                header->count,
-                chunk.size,
-                static_cast<uint32_t>(expected_size));
-            return false;
-        }
 
         auto* weapon_infos = get_weapon_infos_array();
         const auto current_count = get_weapon_infos_count();
@@ -995,22 +1090,16 @@ namespace CLimitAdjuster
         std::unordered_map<uint32_t, uint32_t> unlocked_positions;
         std::unordered_map<uint32_t, uint32_t> locked_positions;
         std::vector<uint8_t> bit_storage((current_count + 7) / 8, 0);
-        bit_array array{
-            bit_storage.data(),
-            static_cast<unsigned int>(bit_storage.size()),
-            false
-        };
-
-        const auto* entries = reinterpret_cast<const crib_weapons_ext_entry*>(chunk.data + sizeof(crib_weapons_ext_header));
+        auto array = bit_array::from_storage(bit_storage.data(), static_cast<unsigned int>(bit_storage.size()));
         uint32_t applied_count = 0;
         uint32_t missing_count = 0;
 
-        for (uint32_t i = 0; i < header->count; i++)
+        for (uint32_t i = 0; i < entry_count; i++)
         {
-            if (!entries[i].unlocked)
+            if (!raw_entries[i].unlocked)
                 continue;
 
-            const auto it = candidates.find(entries[i].checksum);
+            const auto it = candidates.find(raw_entries[i].checksum);
             if (it == candidates.end())
             {
                 missing_count++;
@@ -1018,8 +1107,8 @@ namespace CLimitAdjuster
             }
 
             auto& bucket = it->second;
-            auto& unlocked_pos = unlocked_positions[entries[i].checksum];
-            auto& locked_pos = locked_positions[entries[i].checksum];
+            auto& unlocked_pos = unlocked_positions[raw_entries[i].checksum];
+            auto& locked_pos = locked_positions[raw_entries[i].checksum];
 
             uint32_t chosen_index = UINT32_MAX;
             if (unlocked_pos < bucket.unlocked_indices.size())
@@ -1032,15 +1121,12 @@ namespace CLimitAdjuster
                 continue;
             }
 
-            const uint32_t byte_index = chosen_index / 8;
-            const uint32_t bit_index = chosen_index % 8;
-            if (byte_index >= bit_storage.size())
+            if (!array.set_bit(chosen_index))
             {
                 missing_count++;
                 continue;
             }
 
-            bit_storage[byte_index] |= static_cast<uint8_t>(1u << bit_index);
             applied_count++;
         }
 
@@ -1239,19 +1325,17 @@ namespace CLimitAdjuster
          auto unlockables = get_unlockables_array();
          auto count = get_unlockables_count();
 
-         std::vector<uint8_t> payload(
-             sizeof(unlockables_ext_header) + (sizeof(unlockables_ext_entry) * count),
-             0);
-
-         auto* header = reinterpret_cast<unlockables_ext_header*>(payload.data());
-         header->count = count;
-
-         auto* entries = reinterpret_cast<unlockables_ext_entry*>(payload.data() + sizeof(unlockables_ext_header));
+         std::vector<unlockables_ext_entry> entries(count);
          for (uint32_t i = 0; i < count; i++)
          {
              entries[i].checksum = unlockables[i].checksum.checksum;
              entries[i].unlocked = unlockables[i].is_unlocked ? 1 : 0;
          }
+
+         const unlockables_ext_header header{
+             count
+         };
+         auto payload = build_ext_payload(header, entries);
 
          ExtendedSaves::SetChunk(
              kUnlockablesExtChunkName,
@@ -1269,14 +1353,17 @@ namespace CLimitAdjuster
          auto* weapon_infos = get_weapon_infos_array();
          const auto weapon_count = get_weapon_infos_count();
 
-         if (!weapon_infos && weapon_count != 0)
-         {
-             const crib_weapons_ext_header empty_header{};
-             ExtendedSaves::SetChunk(
-                 kCribWeaponsExtChunkName,
-                 &empty_header,
-                 static_cast<uint32_t>(sizeof(empty_header)),
-                 kCribWeaponsExtChunkVersion);
+          if (!weapon_infos && weapon_count != 0)
+          {
+              const crib_weapons_ext_header empty_header{};
+              const auto payload = build_ext_payload<crib_weapons_ext_header, crib_weapons_ext_entry>(
+                  empty_header,
+                  {});
+              ExtendedSaves::SetChunk(
+                  kCribWeaponsExtChunkName,
+                  payload.data(),
+                  static_cast<uint32_t>(payload.size()),
+                  kCribWeaponsExtChunkVersion);
 
              lprintf("CribWeaponsExt: weapon infos base was null while saving %s, writing empty checksum chunk as fallback.\n",
                  save_name ? save_name : "<null>");
@@ -1308,21 +1395,11 @@ namespace CLimitAdjuster
              entries.push_back(entry);
          }
 
-         std::vector<uint8_t> payload(
-             sizeof(crib_weapons_ext_header) + (sizeof(crib_weapons_ext_entry) * entries.size()),
-             0);
-
-         auto* header = reinterpret_cast<crib_weapons_ext_header*>(payload.data());
-         header->count = static_cast<uint32_t>(entries.size());
-         header->weapon_info_count = weapon_count;
-
-         if (!entries.empty())
-         {
-             memcpy(
-                 payload.data() + sizeof(crib_weapons_ext_header),
-                 entries.data(),
-                 sizeof(crib_weapons_ext_entry) * entries.size());
-         }
+         const crib_weapons_ext_header header{
+             static_cast<uint32_t>(entries.size()),
+             weapon_count
+         };
+         auto payload = build_ext_payload(header, entries);
 
          ExtendedSaves::SetChunk(
              kCribWeaponsExtChunkName,
