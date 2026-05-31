@@ -141,6 +141,7 @@ namespace CLimitAdjuster
         CountSetting items_3d_limit;
         CountSetting customization_logos_limit;
         CountSetting unlockables_limit;
+        uint32_t weapon_store_bucket_limit;
 
     } AdjusterOptions;
     struct addr_xref {
@@ -373,6 +374,212 @@ namespace CLimitAdjuster
             printf("Patched 0x%p -> 0x%p (offset +0x%zX)\n",
                 patch_addr, new_value, Unlockables_Array_xrefs[i].offset);
         }
+    }
+
+    constexpr uint32_t kVanillaWeaponStoreBucketLimit = 16;
+    constexpr uint32_t kWeaponStoreCategoryCount = 8;
+    constexpr uint32_t kWeaponStoreBucketHardMax = 1024;
+
+    struct weapon_store_bucket_layout
+    {
+        uint32_t bucket_capacity;
+        uint32_t bucket_shift;
+        uint32_t bucket_stride_bytes;
+        uint32_t bucket_block_bytes;
+        uint32_t cache_counts_offset;
+        uint32_t cache_buckets_offset;
+        uint32_t owned_counts_offset;
+        uint32_t owned_buckets_offset;
+        uint32_t shop_counts_offset;
+        uint32_t shop_buckets_offset;
+        uint32_t total_size;
+    };
+
+    static uint8_t* g_weapon_store_bucket_storage = nullptr;
+
+    addr_xref Weapon_store_cache_count_xrefs[] = {
+        { 0x007B1C10, 0x00 },
+        { 0x007B1C15, 0x04 },
+        { 0x007B1C1A, 0x08 },
+        { 0x007B1C1F, 0x0C },
+        { 0x007B1C24, 0x10 },
+        { 0x007B1C29, 0x14 },
+        { 0x007B1C2E, 0x18 },
+        { 0x007B1C33, 0x1C },
+        { 0x007B1C57, 0x00 },
+        { 0x007B1C6F, 0x00 },
+        { 0x007B273D, 0x00 },
+    };
+
+    addr_xref Weapon_store_cache_bucket_xrefs[] = {
+        { 0x007B1BF9, 0x00 },
+        { 0x007B1C68, 0x00 },
+        { 0x007B277F, 0x00 },
+        { 0x007B32FB, 0x00 },
+        { 0x007B34AA, 0x00 },
+    };
+
+    addr_xref Weapon_store_owned_count_xrefs[] = {
+        { 0x007B1CE4, 0x00 },
+        { 0x007B1CE9, 0x04 },
+        { 0x007B1CEE, 0x08 },
+        { 0x007B1CF3, 0x0C },
+        { 0x007B1CF8, 0x10 },
+        { 0x007B1CFD, 0x14 },
+        { 0x007B1D02, 0x18 },
+        { 0x007B1D07, 0x1C },
+        { 0x007B1B7E, 0x00 },
+        { 0x007B1D52, 0x00 },
+        { 0x007B1D6A, 0x00 },
+    };
+
+    addr_xref Weapon_store_owned_bucket_xrefs[] = {
+        { 0x007B1B92, 0x00 },
+        { 0x007B1BCD, 0x00 },
+        { 0x007B1CAD, 0x00 },
+        { 0x007B1D63, 0x00 },
+    };
+
+    addr_xref Weapon_store_shop_count_xrefs[] = {
+        { 0x007B1CBC, 0x00 },
+        { 0x007B1CC1, 0x04 },
+        { 0x007B1CC6, 0x08 },
+        { 0x007B1CCB, 0x0C },
+        { 0x007B1CD0, 0x10 },
+        { 0x007B1CD5, 0x14 },
+        { 0x007B1CDA, 0x18 },
+        { 0x007B1CDF, 0x1C },
+        { 0x007B1DF1, 0x00 },
+        { 0x007B1E09, 0x00 },
+        { 0x007B274A, 0x00 },
+    };
+
+    addr_xref Weapon_store_shop_bucket_xrefs[] = {
+        { 0x007B1C9C, 0x00 },
+        { 0x007B1E02, 0x00 },
+        { 0x007B2773, 0x00 },
+        { 0x007B3314, 0x00 },
+        { 0x007B331B, 0x00 },
+        { 0x007B349B, 0x00 },
+    };
+
+    uint32_t read_weapon_store_bucket_limit(CIniReader& ini)
+    {
+        const auto raw_value = static_cast<uint32_t>(ini.ReadInteger(
+            "LIMITS",
+            "WeaponStoreBucketLimit",
+            kVanillaWeaponStoreBucketLimit));
+
+        uint32_t limit = (std::max)(raw_value, kVanillaWeaponStoreBucketLimit);
+        if (limit > kWeaponStoreBucketHardMax)
+        {
+            lprintf("WeaponStoreBucketLimit requested %u, clamping to %u\n",
+                limit, kWeaponStoreBucketHardMax);
+            limit = kWeaponStoreBucketHardMax;
+        }
+
+        if (!std::has_single_bit(limit))
+        {
+            const auto rounded = std::bit_ceil(limit);
+            const auto clamped = (std::min)(rounded, kWeaponStoreBucketHardMax);
+            lprintf("WeaponStoreBucketLimit %u is not a power of two, rounding to %u\n",
+                limit, clamped);
+            limit = clamped;
+        }
+
+        return limit;
+    }
+
+    weapon_store_bucket_layout create_weapon_store_bucket_layout(uint32_t bucket_capacity)
+    {
+        weapon_store_bucket_layout layout{};
+        layout.bucket_capacity = bucket_capacity;
+        layout.bucket_shift = std::countr_zero(bucket_capacity);
+        layout.bucket_stride_bytes = bucket_capacity * sizeof(uint32_t);
+        layout.bucket_block_bytes = kWeaponStoreCategoryCount * layout.bucket_stride_bytes;
+        layout.cache_counts_offset = 0;
+        layout.cache_buckets_offset = sizeof(uint32_t) * kWeaponStoreCategoryCount;
+        layout.owned_counts_offset = layout.cache_buckets_offset + layout.bucket_block_bytes;
+        layout.owned_buckets_offset = layout.owned_counts_offset + sizeof(uint32_t) * kWeaponStoreCategoryCount;
+        layout.shop_counts_offset = layout.owned_buckets_offset + layout.bucket_block_bytes;
+        layout.shop_buckets_offset = layout.shop_counts_offset + sizeof(uint32_t) * kWeaponStoreCategoryCount;
+        layout.total_size = layout.shop_buckets_offset + layout.bucket_block_bytes;
+        return layout;
+    }
+
+    void patch_addr_xref_list(const addr_xref* xrefs, size_t count, uint8_t* new_base)
+    {
+        for (size_t i = 0; i < count; i++)
+        {
+            void* patch_addr = (void*)xrefs[i].patch_location;
+            void* new_value = (void*)((uintptr_t)new_base + xrefs[i].offset);
+            Memory::VP::Patch<void*>(patch_addr, new_value);
+        }
+    }
+
+    void patch_weapon_store_bucket_limit(uint32_t bucket_capacity)
+    {
+        if (bucket_capacity == kVanillaWeaponStoreBucketLimit)
+            return;
+
+        const auto layout = create_weapon_store_bucket_layout(bucket_capacity);
+        g_weapon_store_bucket_storage = new uint8_t[layout.total_size] {};
+
+        auto* cache_counts = g_weapon_store_bucket_storage + layout.cache_counts_offset;
+        auto* cache_buckets = g_weapon_store_bucket_storage + layout.cache_buckets_offset;
+        auto* owned_counts = g_weapon_store_bucket_storage + layout.owned_counts_offset;
+        auto* owned_buckets = g_weapon_store_bucket_storage + layout.owned_buckets_offset;
+        auto* shop_counts = g_weapon_store_bucket_storage + layout.shop_counts_offset;
+        auto* shop_buckets = g_weapon_store_bucket_storage + layout.shop_buckets_offset;
+
+        lprintf("Patching weapon store bucket limit to %u (stride=0x%X, block=0x%X)\n",
+            bucket_capacity,
+            layout.bucket_stride_bytes,
+            layout.bucket_block_bytes);
+
+        patch_addr_xref_list(
+            Weapon_store_cache_count_xrefs,
+            sizeof(Weapon_store_cache_count_xrefs) / sizeof(Weapon_store_cache_count_xrefs[0]),
+            cache_counts);
+        patch_addr_xref_list(
+            Weapon_store_cache_bucket_xrefs,
+            sizeof(Weapon_store_cache_bucket_xrefs) / sizeof(Weapon_store_cache_bucket_xrefs[0]),
+            cache_buckets);
+        patch_addr_xref_list(
+            Weapon_store_owned_count_xrefs,
+            sizeof(Weapon_store_owned_count_xrefs) / sizeof(Weapon_store_owned_count_xrefs[0]),
+            owned_counts);
+        patch_addr_xref_list(
+            Weapon_store_owned_bucket_xrefs,
+            sizeof(Weapon_store_owned_bucket_xrefs) / sizeof(Weapon_store_owned_bucket_xrefs[0]),
+            owned_buckets);
+        patch_addr_xref_list(
+            Weapon_store_shop_count_xrefs,
+            sizeof(Weapon_store_shop_count_xrefs) / sizeof(Weapon_store_shop_count_xrefs[0]),
+            shop_counts);
+        patch_addr_xref_list(
+            Weapon_store_shop_bucket_xrefs,
+            sizeof(Weapon_store_shop_bucket_xrefs) / sizeof(Weapon_store_shop_bucket_xrefs[0]),
+            shop_buckets);
+
+        Memory::VP::Patch<void*>(
+            (void*)0x007B1AAF,
+            (void*)((uintptr_t)owned_buckets + layout.bucket_stride_bytes));
+
+        Patch<uint32_t>(0x007B1BF1 + 1, layout.bucket_block_bytes);
+        Patch<uint32_t>(0x007B1C94 + 1, layout.bucket_block_bytes);
+        Patch<uint32_t>(0x007B1CA5 + 1, layout.bucket_block_bytes);
+
+        Patch<uint8_t>(0x007B1AAA + 2, static_cast<uint8_t>(layout.bucket_shift + 2));
+        Patch<uint8_t>(0x007B1B8E + 2, static_cast<uint8_t>(layout.bucket_shift + 2));
+        Patch<uint8_t>(0x007B2762 + 2, static_cast<uint8_t>(layout.bucket_shift + 2));
+
+        Patch<uint8_t>(0x007B1C5D + 2, static_cast<uint8_t>(layout.bucket_shift));
+        Patch<uint8_t>(0x007B1D58 + 2, static_cast<uint8_t>(layout.bucket_shift));
+        Patch<uint8_t>(0x007B1DF7 + 2, static_cast<uint8_t>(layout.bucket_shift));
+        Patch<uint8_t>(0x007B1BC5 + 2, static_cast<uint8_t>(layout.bucket_shift));
+        Patch<uint8_t>(0x007B32EA + 2, static_cast<uint8_t>(layout.bucket_shift));
+        Patch<uint8_t>(0x007B3488 + 2, static_cast<uint8_t>(layout.bucket_shift));
     }
 
     SafetyHookInline customize_item_system_initD;
@@ -805,6 +1012,9 @@ namespace CLimitAdjuster
 
         AdjusterOptions.unlockables_limit = read_count_setting(
             ini, "LIMITS", "Unlockables", 150);
+        AdjusterOptions.weapon_store_bucket_limit = read_weapon_store_bucket_limit(ini);
+
+        patch_weapon_store_bucket_limit(AdjusterOptions.weapon_store_bucket_limit);
 
         ExtendedSaves::InstallHooks();
         ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSaveUnlockables);
