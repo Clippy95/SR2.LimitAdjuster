@@ -40,6 +40,14 @@ struct checksum_stri
     unsigned int checksum = -1;
 };
 
+class __declspec(align(4)) bit_array
+{
+public:
+    unsigned __int8* mem;
+    unsigned int size;
+    bool is_allocated;
+};
+
 
 static std::mutex g_LogMutex;
 static bool g_DebugLogInitialized = false;
@@ -132,6 +140,7 @@ namespace CLimitAdjuster
         CountSetting customization_items_limit;
         CountSetting items_3d_limit;
         CountSetting customization_logos_limit;
+        CountSetting unlockables_limit;
 
     } AdjusterOptions;
     struct addr_xref {
@@ -315,6 +324,57 @@ namespace CLimitAdjuster
         }
     }
 
+    addr_xref Unlockables_Array_xrefs[] = {
+    { 0x0053A958, 0x0000 },  // mov     ecx, offset Unlockables -> 0x027DD018
+    { 0x00605B0F, 0x0000 },  // mov     eax, offset Unlockables -> 0x027DD018
+    { 0x00605B42, 0x0000 },  // mov     eax, offset Unlockables -> 0x027DD018
+    { 0x00605B6A, 0x0000 },  // mov     eax, offset Unlockables -> 0x027DD018
+    { 0x00605C09, 0x0000 },  // mov     eax, offset Unlockables -> 0x027DD018
+    { 0x0062811B, 0x0000 },  // mov     ecx, offset Unlockables -> 0x027DD018
+    { 0x006B1DCD, 0x0030 },  // mov     eax, (offset Unlockables.mpu.m_data+28h) -> 0x027DD048
+    { 0x006BAC05, 0x00C4 },  // mov     eax, offset Unlockables.is_unlocked -> 0x027DD0DC
+    { 0x006BC809, 0x0000 },  // add     eax, offset Unlockables -> 0x027DD018
+    { 0x006BC840, 0x0000 },  // mov     eax, offset Unlockables -> 0x027DD018
+    { 0x006BC87F, 0x0000 },  // mov     eax, offset Unlockables -> 0x027DD018
+    { 0x006BC8CE, 0x00C8 },  // mov     edi, offset Unlockables.item_this_trumps -> 0x027DD0E0
+    { 0x006BC8DD, 0x0000 },  // mov     ecx, offset Unlockables -> 0x027DD018
+    { 0x006BC902, 0x00CC },  // mov     Unlockables.item_trumper[eax], ecx -> 0x027DD0E4
+    { 0x006BC9D8, 0x0000 },  // mov     edx, offset Unlockables -> 0x027DD018
+    { 0x006BC9F8, 0x0000 },  // add     eax, offset Unlockables -> 0x027DD018
+    { 0x006BCC14, 0x00C4 },  // mov     eax, offset Unlockables.is_unlocked -> 0x027DD0DC
+    { 0x006BCD3F, 0x0000 },  // mov     ecx, offset Unlockables -> 0x027DD018
+    { 0x006BCDA1, 0x0000 },  // mov     eax, offset Unlockables -> 0x027DD018
+    { 0x006BCE20, 0x0000 },  // mov     ecx, offset Unlockables -> 0x027DD018
+    { 0x006BCE60, 0x0000 },  // mov     ecx, offset Unlockables -> 0x027DD018
+    { 0x006BCEA0, 0x0000 },  // mov     ecx, offset Unlockables -> 0x027DD018
+    { 0x006BCEE0, 0x0000 },  // mov     ecx, offset Unlockables -> 0x027DD018
+    { 0x006BCF20, 0x0000 },  // mov     ecx, offset Unlockables -> 0x027DD018
+    { 0x006BCF60, 0x0000 },  // mov     eax, offset Unlockables -> 0x027DD018
+    { 0x006BCF90, 0x0000 },  // mov     ecx, offset Unlockables -> 0x027DD018
+    { 0x006BCFC0, 0x0000 },  // mov     ecx, offset Unlockables -> 0x027DD018
+    { 0x006BD09D, 0x0030 },  // mov     ecx, (offset Unlockables.mpu.m_data+28h) -> 0x027DD048
+    { 0x006BD158, 0x00CC },  // mov     ebx, offset Unlockables.item_trumper -> 0x027DD0E4
+    { 0x006BD28F, 0x00C4 },  // mov     edi, offset Unlockables.is_unlocked -> 0x027DD0DC
+    { 0x006BD2E7, 0x0008 },  // mov     esi, offset Unlockables.mpu -> 0x027DD020
+    { 0x007504AE, 0x0000 },  // mov     ecx, offset Unlockables -> 0x027DD018
+    { 0x007622C5, 0x0000 },  // mov     ecx, offset Unlockables -> 0x027DD018
+    { 0x00DA9B27, 0x0000 },  // mov     eax, offset Unlockables -> 0x027DD018
+    };
+
+    const size_t Unlockables_Array_xref_count = sizeof(Unlockables_Array_xrefs) / sizeof(Unlockables_Array_xrefs[0]);
+
+
+    void patch_Unlockables_Array_references(void* new_base) {
+        for (size_t i = 0; i < Unlockables_Array_xref_count; i++) {
+            void* patch_addr = (void*)Unlockables_Array_xrefs[i].patch_location;
+            void* new_value = (void*)((uintptr_t)new_base + Unlockables_Array_xrefs[i].offset);
+
+            Memory::VP::Patch<void*>(patch_addr, new_value);
+            printf("Patched 0x%p -> 0x%p (offset +0x%zX)\n",
+                patch_addr, new_value, Unlockables_Array_xrefs[i].offset);
+        }
+    }
+
     SafetyHookInline customize_item_system_initD;
     uint32_t items_count = 0;
 
@@ -381,6 +441,101 @@ namespace CLimitAdjuster
         char* PEG_NAME;
     };
 
+    struct unlockable_item
+    {
+        checksum_stri checksum;
+        char pad0[0xC0];
+        bool is_unlocked;
+        bool dlc_start_unlocked;
+        char pad1[7];
+    };
+
+#pragma pack(push, 1)
+    struct unlockables_ext_header
+    {
+        uint32_t count;
+    };
+
+    struct unlockables_ext_entry
+    {
+        uint32_t checksum;
+        uint8_t unlocked;
+        uint8_t reserved[3];
+    };
+#pragma pack(pop)
+
+    uint32_t* Num_unlockable_items = (uint32_t*)0x0145A29C_g;
+    constexpr const char* kUnlockablesExtChunkName = "unlockables_ext";
+    constexpr uint32_t kUnlockablesExtChunkVersion = 1;
+    const uintptr_t kRetailUnlockablesBase = 0x027DD018_g;
+    unlockable_item* new_unlockables_array = nullptr;
+
+    using unlockable_load_fn = void(__cdecl*)(bit_array* array);
+    unlockable_load_fn g_unlockable_load = reinterpret_cast<unlockable_load_fn>(0x6BD2D0_g);
+    using unlock_item_fn = void(__fastcall*)(unlockable_item* item, int unused);
+    unlock_item_fn g_unlock_item = reinterpret_cast<unlock_item_fn>(0x6BBD50_g);
+
+    unlockable_item* get_unlockables_array()
+    {
+        if (new_unlockables_array)
+            return new_unlockables_array;
+
+        return reinterpret_cast<unlockable_item*>(kRetailUnlockablesBase);
+    }
+
+    uint32_t get_unlockables_count()
+    {
+        return Num_unlockable_items ? *Num_unlockable_items : 0;
+    }
+
+    int find_unlockable_index_by_checksum(uint32_t checksum)
+    {
+        auto unlockables = get_unlockables_array();
+        auto count = get_unlockables_count();
+
+        for (uint32_t i = 0; i < count; i++)
+        {
+            if (unlockables[i].checksum.checksum == checksum)
+                return static_cast<int>(i);
+        }
+
+        return -1;
+    }
+
+    void unlockable_load(bit_array* array)
+    {
+        g_unlockable_load(array);
+    }
+
+    void replay_dlc_unlock_side_effects()
+    {
+        auto unlockables = get_unlockables_array();
+        auto count = get_unlockables_count();
+        uint32_t replayed_count = 0;
+
+        for (uint32_t i = 0; i < count; i++)
+        {
+            if (!unlockables[i].dlc_start_unlocked || !unlockables[i].is_unlocked)
+                continue;
+
+            g_unlock_item(&unlockables[i], 1);
+            replayed_count++;
+        }
+
+        if (replayed_count)
+            lprintf("UnlockablesExt: replayed %u DLC unlock side effects after checksum load.\n", replayed_count);
+    }
+
+    void __cdecl unlockable_load_hook(bit_array* array)
+    {
+        if (ExtendedSaves::HasChunk(ExtendedSaves::MakeTag(kUnlockablesExtChunkName)))
+        {
+            lprintf("UnlockablesExt: skipping vanilla unlockable_load because checksum chunk is present.\n");
+            return;
+        }
+
+        g_unlockable_load(array);
+    }
 
      void* SAFETYHOOK_CCALL customize_item_system_init()
     {
@@ -435,6 +590,7 @@ namespace CLimitAdjuster
          return sr2_init_stage_1D.unsafe_ccall<char>();
      }
      SafetyHookInline sr2_init_stage_2D;
+
      int _cdecl sr2_init_stage_2_hook()
      {
           auto object_info = xtbl_parse_table_node("items_3d.xtbl", nullptr);
@@ -482,27 +638,142 @@ namespace CLimitAdjuster
 
          }
          xtbl_free();
+
+         auto unlockables_xml = xtbl_parse_table_node("unlockables.xtbl", nullptr);
+
+         if (unlockables_xml)
+         {
+             auto unlockables_count = xml_count(unlockables_xml, "Unlockable");
+
+             auto dlc_unlockables_xml = xtbl_parse_table_node("dlc_unlockables.xtbl", nullptr);
+
+             if (dlc_unlockables_xml)
+             {
+                 unlockables_count += xml_count(dlc_unlockables_xml, "Unlockable");
+             }
+
+             const auto unlockables_capacity = resolve_capacity(
+                 "Unlockables",
+                 AdjusterOptions.unlockables_limit,
+                 unlockables_count,
+                 150);
+
+             if (should_apply_capacity_patch(
+                 AdjusterOptions.force_dyn,
+                 AdjusterOptions.unlockables_limit,
+                 unlockables_capacity,
+                 150))
+             {
+                 new_unlockables_array = new unlockable_item[unlockables_capacity] ;
+                 lprintf("Patching customization_logos with %p count=%u capacity=%u\n", new_unlockables_array, unlockables_count, unlockables_capacity);
+                 patch_Unlockables_Array_references(new_unlockables_array);
+                 Patch<size_t>(0x6BC990 + 1, unlockables_capacity);
+             }
+         }
+         xtbl_free();
+
          return sr2_init_stage_2D.unsafe_ccall<int>();
      }
 
-     struct MySaveData
+     static void OnBeforeSaveUnlockables(const char* save_name)
      {
-         int weapon_limit;
-         int owned_weapon_cap;
-     };
+         auto unlockables = get_unlockables_array();
+         auto count = get_unlockables_count();
 
-     MySaveData data{
-    2048,
-    4096
-     };
+         std::vector<uint8_t> payload(
+             sizeof(unlockables_ext_header) + (sizeof(unlockables_ext_entry) * count),
+             0);
 
-     static void OnBeforeSave(const char* save_name)
+         auto* header = reinterpret_cast<unlockables_ext_header*>(payload.data());
+         header->count = count;
+
+         auto* entries = reinterpret_cast<unlockables_ext_entry*>(payload.data() + sizeof(unlockables_ext_header));
+         for (uint32_t i = 0; i < count; i++)
+         {
+             entries[i].checksum = unlockables[i].checksum.checksum;
+             entries[i].unlocked = unlockables[i].is_unlocked ? 1 : 0;
+         }
+
+         ExtendedSaves::SetChunk(
+             kUnlockablesExtChunkName,
+             payload.data(),
+             static_cast<uint32_t>(payload.size()),
+             kUnlockablesExtChunkVersion);
+
+         lprintf("UnlockablesExt: saved %u unlockables for %s\n",
+             count,
+             save_name ? save_name : "<null>");
+     }
+
+     static void OnAfterLoadUnlockables(const char* save_name, bool has_extension)
      {
-         ExtendedSaves::SetPod("limitadjuster_state", data);
-         lprintf("OnBeforeSave %s count=%u ext=0x%X\n",
+         if (!has_extension)
+             return;
+
+         auto chunk = ExtendedSaves::GetChunk(kUnlockablesExtChunkName);
+         if (!chunk)
+             return;
+
+         if (chunk.version != kUnlockablesExtChunkVersion || chunk.size < sizeof(unlockables_ext_header))
+         {
+             lprintf("UnlockablesExt: ignoring invalid chunk for %s (version=%u size=%u)\n",
+                 save_name ? save_name : "<null>",
+                 chunk.version,
+                 chunk.size);
+             return;
+         }
+
+         const auto* header = reinterpret_cast<const unlockables_ext_header*>(chunk.data);
+         const auto expected_size = sizeof(unlockables_ext_header) + (sizeof(unlockables_ext_entry) * header->count);
+         if (chunk.size != expected_size)
+         {
+             lprintf("UnlockablesExt: ignoring malformed chunk for %s (count=%u size=%u expected=%u)\n",
+                 save_name ? save_name : "<null>",
+                 header->count,
+                 chunk.size,
+                 static_cast<uint32_t>(expected_size));
+             return;
+         }
+
+         auto current_count = get_unlockables_count();
+         std::vector<uint8_t> bit_storage((current_count + 7) / 8, 0);
+         bit_array array{
+             bit_storage.data(),
+             static_cast<unsigned int>(bit_storage.size()),
+             false
+         };
+
+         const auto* entries = reinterpret_cast<const unlockables_ext_entry*>(chunk.data + sizeof(unlockables_ext_header));
+         uint32_t applied_count = 0;
+         uint32_t missing_count = 0;
+
+         for (uint32_t i = 0; i < header->count; i++)
+         {
+             if (!entries[i].unlocked)
+                 continue;
+
+             const int index = find_unlockable_index_by_checksum(entries[i].checksum);
+             if (index < 0)
+             {
+                 missing_count++;
+                 continue;
+             }
+
+             const uint32_t byte_index = static_cast<uint32_t>(index) / 8;
+             const uint32_t bit_index = static_cast<uint32_t>(index) % 8;
+             if (byte_index >= bit_storage.size())
+                 continue;
+
+             bit_storage[byte_index] |= static_cast<uint8_t>(1u << bit_index);
+             applied_count++;
+         }
+
+         unlockable_load(&array);
+         replay_dlc_unlock_side_effects();
+         lprintf("UnlockablesExt: loaded %u unlockables for %s (%u missing checksums)\n",
+             applied_count,
              save_name ? save_name : "<null>",
-             ExtendedSaves::GetCurrentChunkCount(),
-             ExtendedSaves::GetSerializedExtensionSize());
+             missing_count);
      }
 
      SafetyHookInline character_initd;
@@ -529,8 +800,14 @@ namespace CLimitAdjuster
             ini, "LIMITS", "Items3D", kVanillaItems3DLimit);
         AdjusterOptions.customization_logos_limit = read_count_setting(
             ini, "LIMITS", "CustomizationLogos", kVanillaCustomizationLogosLimit);
+
+        AdjusterOptions.unlockables_limit = read_count_setting(
+            ini, "LIMITS", "Unlockables", 150);
+
         ExtendedSaves::InstallHooks();
-        //ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSave);
+        ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSaveUnlockables);
+        ExtendedSaves::RegisterAfterLoadCallback(OnAfterLoadUnlockables);
+        InterceptCall(0x694DD9_g, g_unlockable_load, unlockable_load_hook);
         static auto testing = safetyhook::create_mid(0x7BBA68_g, [](SafetyHookContext& ctx) {
             xml_element* node = (xml_element*)ctx.eax;
             });

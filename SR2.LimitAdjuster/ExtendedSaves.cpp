@@ -297,6 +297,35 @@ namespace ExtendedSaves
             return true;
         }
 
+        bool PreloadSaveExtension(const char* save_name)
+        {
+            Clear();
+
+            const std::filesystem::path save_path = BuildSavePath(save_name);
+            std::error_code ec;
+            const std::uintmax_t file_size = save_path.empty() ? 0 : std::filesystem::file_size(save_path, ec);
+            if (ec || file_size <= kVanillaSerializedSize)
+                return false;
+
+            std::ifstream file(save_path, std::ios::binary);
+            if (!file.is_open())
+            {
+                lprintf("ExtendedSaves: failed to open %s for extension preload.\n", save_path.string().c_str());
+                return false;
+            }
+
+            std::vector<std::uint8_t> file_bytes(static_cast<std::size_t>(file_size));
+            file.read(reinterpret_cast<char*>(file_bytes.data()), static_cast<std::streamsize>(file_bytes.size()));
+            if (!file.good() && !file.eof())
+            {
+                lprintf("ExtendedSaves: failed while reading %s for extension preload.\n", save_path.string().c_str());
+                Clear();
+                return false;
+            }
+
+            return ParseSerializedExtension(file_bytes.data(), file_bytes.size());
+        }
+
         bool UC_CDECL SaveWriterHook(const char* save_name, char* save_game_ptr)
         {
             RunBeforeSaveCallbacks(save_name);
@@ -310,6 +339,7 @@ namespace ExtendedSaves
 
         bool UC_CDECL SaveLoaderHook(void** save_game_ptr, const char* save_name)
         {
+            const bool has_extension = PreloadSaveExtension(save_name);
             const bool result = g_SaveLoaderHook.call_original(save_game_ptr, save_name);
             if (!result || !save_game_ptr || !*save_game_ptr)
             {
@@ -318,19 +348,6 @@ namespace ExtendedSaves
                 return result;
             }
 
-            const std::filesystem::path save_path = BuildSavePath(save_name);
-            std::error_code ec;
-            const std::uintmax_t file_size = save_path.empty() ? 0 : std::filesystem::file_size(save_path, ec);
-            if (ec || file_size <= kVanillaSerializedSize)
-            {
-                Clear();
-                RunAfterLoadCallbacks(save_name, false);
-                return result;
-            }
-
-            const bool has_extension = ParseSerializedExtension(
-                static_cast<const std::uint8_t*>(*save_game_ptr),
-                static_cast<std::size_t>(file_size));
             RunAfterLoadCallbacks(save_name, has_extension);
             return result;
         }
