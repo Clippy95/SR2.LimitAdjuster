@@ -6,6 +6,7 @@
 #include "ExtendedSaves.h"
 #include "LimitConfig.h"
 #include "Mempool.h"
+#include <unordered_map>
 struct vector
 {
     float x;
@@ -670,18 +671,42 @@ namespace CLimitAdjuster
         uint8_t unlocked;
         uint8_t reserved[3];
     };
+
+    struct crib_weapons_ext_header
+    {
+        uint32_t count;
+        uint32_t weapon_info_count;
+    };
+
+    struct crib_weapons_ext_entry
+    {
+        uint32_t checksum;
+        uint8_t unlocked;
+        uint8_t reserved[3];
+    };
 #pragma pack(pop)
 
     uint32_t* Num_unlockable_items = (uint32_t*)0x0145A29C_g;
     constexpr const char* kUnlockablesExtChunkName = "unlockables_ext";
     constexpr uint32_t kUnlockablesExtChunkVersion = 1;
+    constexpr const char* kCribWeaponsExtChunkName = "crib_weapons_ext";
+    constexpr uint32_t kCribWeaponsExtChunkVersion = 1;
+    constexpr uint32_t kCribWeaponUnlockedFlag = 0x08000000;
+    constexpr uint32_t kRetailWeaponInfoStride = 0x498;
+    constexpr uint32_t kRetailWeaponInfoNameOffset = 0x0;
+    constexpr uint32_t kRetailWeaponInfoFlagsOffset = 0xC;
     const uintptr_t kRetailUnlockablesBase = 0x027DD018_g;
     unlockable_item* new_unlockables_array = nullptr;
+    std::once_flag g_crib_weapons_ext_name_popup_once;
 
     using unlockable_load_fn = void(__cdecl*)(bit_array* array);
     unlockable_load_fn g_unlockable_load = reinterpret_cast<unlockable_load_fn>(0x6BD2D0_g);
     using unlock_item_fn = void(__fastcall*)(unlockable_item* item, int unused);
     unlock_item_fn g_unlock_item = reinterpret_cast<unlock_item_fn>(0x6BBD50_g);
+    using crib_weapon_load_abi = uc::abi<
+        uc::eax_ret<int>,
+        uc::edi_arg<bit_array*>>;
+    crib_weapon_load_abi::callback_t g_crib_weapon_load_hook_callback;
 
     unlockable_item* get_unlockables_array()
     {
@@ -715,6 +740,121 @@ namespace CLimitAdjuster
         g_unlockable_load(array);
     }
 
+    crib_weapon_load_abi::function_t& get_crib_weapon_load()
+    {
+        static auto load_fn = crib_weapon_load_abi::make(0xB74070_g);
+        return load_fn;
+    }
+
+    uint8_t* get_weapon_infos_array()
+    {
+        auto base_ptr = reinterpret_cast<uint8_t**>(0x022D7BCC_g);
+        return base_ptr ? *base_ptr : nullptr;
+    }
+
+    uint32_t get_weapon_infos_count()
+    {
+        auto count_ptr = reinterpret_cast<uint32_t*>(0x022D7BD0_g);
+        return count_ptr ? *count_ptr : 0;
+    }
+
+    uint8_t* get_weapon_info_at(uint8_t* weapon_infos, uint32_t index)
+    {
+        if (!weapon_infos)
+            return nullptr;
+
+        return weapon_infos + (static_cast<size_t>(index) * kRetailWeaponInfoStride);
+    }
+
+    const char* get_weapon_info_name(const uint8_t* weapon)
+    {
+        return *reinterpret_cast<const char* const*>(weapon + kRetailWeaponInfoNameOffset);
+    }
+
+    uint32_t get_weapon_info_flags(const uint8_t* weapon)
+    {
+        return *reinterpret_cast<const uint32_t*>(weapon + kRetailWeaponInfoFlagsOffset);
+    }
+
+    bool is_crib_weapon_unlocked(const uint8_t* weapon)
+    {
+        return weapon && (get_weapon_info_flags(weapon) & kCribWeaponUnlockedFlag) != 0;
+    }
+
+    void show_crib_weapons_ext_name_error_popup(const char* phase, uint32_t index, uint32_t weapon_count)
+    {
+        std::call_once(g_crib_weapons_ext_name_popup_once, [phase, index, weapon_count]()
+            {
+                char buffer[512]{};
+                snprintf(
+                    buffer,
+                    sizeof(buffer),
+                    "CribWeaponsExt hit a weapon_info with a null or invalid name pointer while %s.\n\n"
+                    "index=%u\n"
+                    "Num_weapon_infos=%u\n\n"
+                    "That entry will be skipped for the extended checksum save/load path.\n"
+                    "Vanilla crib weapon save data is still kept as fallback.",
+                    phase ? phase : "processing crib weapon checksums",
+                    index,
+                    weapon_count);
+
+                MessageBoxA(
+                    nullptr,
+                    buffer,
+                    "SR2 Limit Adjuster - CribWeaponsExt warning",
+                    MB_OK | MB_ICONWARNING | MB_TOPMOST);
+            });
+    }
+
+    bool try_get_weapon_name_checksum(
+        const uint8_t* weapon,
+        uint32_t index,
+        uint32_t weapon_count,
+        const char* phase,
+        uint32_t& checksum_out)
+    {
+        if (!weapon)
+        {
+            show_crib_weapons_ext_name_error_popup(phase, index, weapon_count);
+            lprintf("CribWeaponsExt: null weapon_info pointer while %s at index %u/%u\n",
+                phase ? phase : "<unknown>",
+                index,
+                weapon_count);
+            return false;
+        }
+
+        __try
+        {
+            const char* name = get_weapon_info_name(weapon);
+            if (!name || !*name)
+            {
+                show_crib_weapons_ext_name_error_popup(phase, index, weapon_count);
+                lprintf("CribWeaponsExt: null/empty weapon name while %s at index %u/%u\n",
+                    phase ? phase : "<unknown>",
+                    index,
+                    weapon_count);
+                return false;
+            }
+
+            checksum_out = static_cast<uint32_t>(str_to_hash(name));
+            return true;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            show_crib_weapons_ext_name_error_popup(phase, index, weapon_count);
+            lprintf("CribWeaponsExt: exception reading weapon name while %s at index %u/%u\n",
+                phase ? phase : "<unknown>",
+                index,
+                weapon_count);
+            return false;
+        }
+    }
+
+    int weapons_load_crib_availability(bit_array* array)
+    {
+        return get_crib_weapon_load()(array);
+    }
+
     void replay_dlc_unlock_side_effects()
     {
         auto unlockables = get_unlockables_array();
@@ -744,6 +884,18 @@ namespace CLimitAdjuster
         }
 
         g_unlockable_load(array);
+    }
+
+    int __cdecl weapons_load_crib_availability_hook(bit_array* array)
+    {
+        if (ExtendedSaves::IsLoadInProgress()
+            && ExtendedSaves::HasChunk(ExtendedSaves::MakeTag(kCribWeaponsExtChunkName)))
+        {
+            lprintf("CribWeaponsExt: skipping vanilla weapons_load_crib_availability because checksum chunk is present.\n");
+            return 0;
+        }
+
+        return weapons_load_crib_availability(array);
     }
 
      void* SAFETYHOOK_CCALL customize_item_system_init()
@@ -914,6 +1066,80 @@ namespace CLimitAdjuster
              save_name ? save_name : "<null>");
      }
 
+     static void OnBeforeSaveCribWeapons(const char* save_name)
+     {
+         auto* weapon_infos = get_weapon_infos_array();
+         const auto weapon_count = get_weapon_infos_count();
+
+         if (!weapon_infos && weapon_count != 0)
+         {
+             const crib_weapons_ext_header empty_header{};
+             ExtendedSaves::SetChunk(
+                 kCribWeaponsExtChunkName,
+                 &empty_header,
+                 static_cast<uint32_t>(sizeof(empty_header)),
+                 kCribWeaponsExtChunkVersion);
+
+             lprintf("CribWeaponsExt: weapon infos base was null while saving %s, writing empty checksum chunk as fallback.\n",
+                 save_name ? save_name : "<null>");
+             return;
+         }
+
+         std::vector<crib_weapons_ext_entry> entries;
+         entries.reserve(weapon_count);
+
+         uint32_t skipped_count = 0;
+         uint32_t unlocked_count = 0;
+
+         for (uint32_t i = 0; i < weapon_count; i++)
+         {
+             auto* weapon = get_weapon_info_at(weapon_infos, i);
+             uint32_t checksum = 0;
+             if (!try_get_weapon_name_checksum(weapon, i, weapon_count, "saving crib weapon checksums", checksum))
+             {
+                 skipped_count++;
+                 continue;
+             }
+
+             crib_weapons_ext_entry entry{};
+             entry.checksum = checksum;
+             entry.unlocked = is_crib_weapon_unlocked(weapon) ? 1 : 0;
+             if (entry.unlocked)
+                 unlocked_count++;
+
+             entries.push_back(entry);
+         }
+
+         std::vector<uint8_t> payload(
+             sizeof(crib_weapons_ext_header) + (sizeof(crib_weapons_ext_entry) * entries.size()),
+             0);
+
+         auto* header = reinterpret_cast<crib_weapons_ext_header*>(payload.data());
+         header->count = static_cast<uint32_t>(entries.size());
+         header->weapon_info_count = weapon_count;
+
+         if (!entries.empty())
+         {
+             memcpy(
+                 payload.data() + sizeof(crib_weapons_ext_header),
+                 entries.data(),
+                 sizeof(crib_weapons_ext_entry) * entries.size());
+         }
+
+         ExtendedSaves::SetChunk(
+             kCribWeaponsExtChunkName,
+             payload.data(),
+             static_cast<uint32_t>(payload.size()),
+             kCribWeaponsExtChunkVersion);
+
+         lprintf("CribWeaponsExt: saved %u/%u crib weapon entries for %s (%u unlocked, %u skipped invalid names)\n",
+             static_cast<uint32_t>(entries.size()),
+             weapon_count,
+             save_name ? save_name : "<null>",
+             unlocked_count,
+             skipped_count);
+     }
+
      static void OnAfterLoadUnlockables(const char* save_name, bool has_extension)
      {
          if (!has_extension)
@@ -985,6 +1211,137 @@ namespace CLimitAdjuster
              missing_count);
      }
 
+     static void OnAfterLoadCribWeapons(const char* save_name, bool has_extension)
+     {
+         if (!has_extension)
+             return;
+
+         auto chunk = ExtendedSaves::GetChunk(kCribWeaponsExtChunkName);
+         if (!chunk)
+             return;
+
+         if (chunk.version != kCribWeaponsExtChunkVersion || chunk.size < sizeof(crib_weapons_ext_header))
+         {
+             lprintf("CribWeaponsExt: ignoring invalid chunk for %s (version=%u size=%u)\n",
+                 save_name ? save_name : "<null>",
+                 chunk.version,
+                 chunk.size);
+             return;
+         }
+
+         const auto* header = reinterpret_cast<const crib_weapons_ext_header*>(chunk.data);
+         const auto expected_size = sizeof(crib_weapons_ext_header) + (sizeof(crib_weapons_ext_entry) * header->count);
+         if (chunk.size != expected_size)
+         {
+             lprintf("CribWeaponsExt: ignoring malformed chunk for %s (count=%u size=%u expected=%u)\n",
+                 save_name ? save_name : "<null>",
+                 header->count,
+                 chunk.size,
+                 static_cast<uint32_t>(expected_size));
+             return;
+         }
+
+         auto* weapon_infos = get_weapon_infos_array();
+         const auto current_count = get_weapon_infos_count();
+         if (!weapon_infos || current_count == 0)
+         {
+             lprintf("CribWeaponsExt: no weapon infos available while loading %s\n",
+                 save_name ? save_name : "<null>");
+             return;
+         }
+
+         struct checksum_candidates
+         {
+             std::vector<uint32_t> unlocked_indices;
+             std::vector<uint32_t> locked_indices;
+         };
+
+         std::unordered_map<uint32_t, checksum_candidates> candidates;
+         uint32_t skipped_current_count = 0;
+
+         for (uint32_t i = 0; i < current_count; i++)
+         {
+             auto* weapon = get_weapon_info_at(weapon_infos, i);
+             uint32_t checksum = 0;
+             if (!try_get_weapon_name_checksum(weapon, i, current_count, "loading crib weapon checksums", checksum))
+             {
+                 skipped_current_count++;
+                 continue;
+             }
+
+             auto& bucket = candidates[checksum];
+             if (is_crib_weapon_unlocked(weapon))
+                 bucket.unlocked_indices.push_back(i);
+             else
+                 bucket.locked_indices.push_back(i);
+         }
+
+         std::unordered_map<uint32_t, uint32_t> unlocked_positions;
+         std::unordered_map<uint32_t, uint32_t> locked_positions;
+         std::vector<uint8_t> bit_storage((current_count + 7) / 8, 0);
+         bit_array array{
+             bit_storage.data(),
+             static_cast<unsigned int>(bit_storage.size()),
+             false
+         };
+
+         const auto* entries = reinterpret_cast<const crib_weapons_ext_entry*>(chunk.data + sizeof(crib_weapons_ext_header));
+         uint32_t applied_count = 0;
+         uint32_t missing_count = 0;
+
+         for (uint32_t i = 0; i < header->count; i++)
+         {
+             if (!entries[i].unlocked)
+                 continue;
+
+             const auto it = candidates.find(entries[i].checksum);
+             if (it == candidates.end())
+             {
+                 missing_count++;
+                 continue;
+             }
+
+             auto& bucket = it->second;
+             auto& unlocked_pos = unlocked_positions[entries[i].checksum];
+             auto& locked_pos = locked_positions[entries[i].checksum];
+
+             uint32_t chosen_index = UINT32_MAX;
+             if (unlocked_pos < bucket.unlocked_indices.size())
+             {
+                 chosen_index = bucket.unlocked_indices[unlocked_pos++];
+             }
+             else if (locked_pos < bucket.locked_indices.size())
+             {
+                 chosen_index = bucket.locked_indices[locked_pos++];
+             }
+             else
+             {
+                 missing_count++;
+                 continue;
+             }
+
+             const uint32_t byte_index = chosen_index / 8;
+             const uint32_t bit_index = chosen_index % 8;
+             if (byte_index >= bit_storage.size())
+             {
+                 missing_count++;
+                 continue;
+             }
+
+             bit_storage[byte_index] |= static_cast<uint8_t>(1u << bit_index);
+             applied_count++;
+         }
+
+         weapons_load_crib_availability(&array);
+         lprintf("CribWeaponsExt: loaded %u crib weapon entries for %s (%u missing checksums, %u current invalid names, save_count=%u current_count=%u)\n",
+             applied_count,
+             save_name ? save_name : "<null>",
+             missing_count,
+             skipped_current_count,
+             header->weapon_info_count,
+             current_count);
+     }
+
      SafetyHookInline character_initd;
 
      void* SAFETYHOOK_CCALL character_init()
@@ -1018,8 +1375,12 @@ namespace CLimitAdjuster
 
         ExtendedSaves::InstallHooks();
         ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSaveUnlockables);
+        ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSaveCribWeapons);
         ExtendedSaves::RegisterAfterLoadCallback(OnAfterLoadUnlockables);
+        ExtendedSaves::RegisterAfterLoadCallback(OnAfterLoadCribWeapons);
         InterceptCall(0x694DD9_g, g_unlockable_load, unlockable_load_hook);
+        g_crib_weapon_load_hook_callback = crib_weapon_load_abi::make_callback(weapons_load_crib_availability_hook);
+        uc::patch_call(0x694DFC_g, g_crib_weapon_load_hook_callback.raw());
         static auto testing = safetyhook::create_mid(0x7BBA68_g, [](SafetyHookContext& ctx) {
             xml_element* node = (xml_element*)ctx.eax;
             });
