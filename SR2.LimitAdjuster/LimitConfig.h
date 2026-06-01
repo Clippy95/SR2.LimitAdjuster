@@ -13,6 +13,7 @@ namespace CLimitAdjuster
 
     struct CountSetting
     {
+        bool disabled = false;
         bool auto_mode = true;
         uint32_t value = 0;
     };

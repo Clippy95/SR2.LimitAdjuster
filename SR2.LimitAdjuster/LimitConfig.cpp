@@ -34,6 +34,19 @@ namespace CLimitAdjuster
         if (lowered.empty() || lowered == "auto")
             return {};
 
+        if (lowered == "0" || lowered == "-1")
+        {
+            CountSetting setting{};
+            setting.disabled = true;
+            setting.auto_mode = false;
+            setting.value = 0;
+            lprintf("%.*s.%.*s disabled by config value '%s'\n",
+                static_cast<int>(section.size()), section.data(),
+                static_cast<int>(key.size()), key.data(),
+                raw.c_str());
+            return setting;
+        }
+
         try
         {
             size_t parsed_chars = 0;
@@ -80,6 +93,10 @@ namespace CLimitAdjuster
         {
             wanted = (std::max<uint64_t>)(vanilla_limit, static_cast<uint64_t>(detected_count) + auto_headroom);
         }
+        else if (setting.disabled)
+        {
+            wanted = vanilla_limit;
+        }
         else
         {
             wanted = (std::max<uint64_t>)(vanilla_limit, setting.value);
@@ -109,6 +126,9 @@ namespace CLimitAdjuster
         uint32_t capacity,
         uint32_t vanilla_limit)
     {
+        if (setting.disabled)
+            return false;
+
         return force_dyn || !setting.auto_mode || capacity > vanilla_limit;
     }
 }

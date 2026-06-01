@@ -176,6 +176,8 @@ namespace CLimitAdjuster
     struct Options
     {
         unsigned __int8 force_dyn : 1;
+        unsigned __int8 unlockables_save_ext_enabled : 1;
+        unsigned __int8 weapon_infos_save_ext_enabled : 1;
         CountSetting customization_items_limit;
         CountSetting items_3d_limit;
         CountSetting customization_logos_limit;
@@ -906,6 +908,16 @@ namespace CLimitAdjuster
         return g_active_extended_misc_unlockables_load && ExtendedSaves::HasChunk(tag);
     }
 
+    bool is_unlockables_save_ext_enabled()
+    {
+        return AdjusterOptions.unlockables_save_ext_enabled != 0;
+    }
+
+    bool is_weapon_infos_save_ext_enabled()
+    {
+        return AdjusterOptions.weapon_infos_save_ext_enabled != 0;
+    }
+
     template <typename Header, typename Entry>
     std::vector<uint8_t> build_ext_payload(const Header& header, const std::vector<Entry>& entries)
     {
@@ -1162,7 +1174,8 @@ namespace CLimitAdjuster
 
     void __cdecl unlockable_load_hook(bit_array* array)
     {
-        if (should_override_misc_unlockables_now(ExtendedSaves::MakeTag(kUnlockablesExtChunkName)))
+        if (is_unlockables_save_ext_enabled()
+            && should_override_misc_unlockables_now(ExtendedSaves::MakeTag(kUnlockablesExtChunkName)))
         {
             apply_unlockables_ext_from_chunk("<misc_unlockables>");
             return;
@@ -1173,7 +1186,8 @@ namespace CLimitAdjuster
 
     int __cdecl weapons_load_crib_availability_hook(bit_array* array)
     {
-        if (should_override_misc_unlockables_now(ExtendedSaves::MakeTag(kCribWeaponsExtChunkName)))
+        if (is_weapon_infos_save_ext_enabled()
+            && should_override_misc_unlockables_now(ExtendedSaves::MakeTag(kCribWeaponsExtChunkName)))
         {
             apply_crib_weapons_ext_from_chunk("<misc_unlockables>");
             return 1;
@@ -1322,6 +1336,12 @@ namespace CLimitAdjuster
 
      static void OnBeforeSaveUnlockables(const char* save_name)
      {
+         if (!is_unlockables_save_ext_enabled())
+         {
+             ExtendedSaves::RemoveChunk(kUnlockablesExtChunkName);
+             return;
+         }
+
          auto unlockables = get_unlockables_array();
          auto count = get_unlockables_count();
 
@@ -1350,6 +1370,12 @@ namespace CLimitAdjuster
 
      static void OnBeforeSaveCribWeapons(const char* save_name)
      {
+         if (!is_weapon_infos_save_ext_enabled())
+         {
+             ExtendedSaves::RemoveChunk(kCribWeaponsExtChunkName);
+             return;
+         }
+
          auto* weapon_infos = get_weapon_infos_array();
          const auto weapon_count = get_weapon_infos_count();
 
@@ -1417,7 +1443,7 @@ namespace CLimitAdjuster
 
      static void OnAfterLoadUnlockables(const char* save_name, bool has_extension)
      {
-         if (!has_extension)
+         if (!has_extension || !is_unlockables_save_ext_enabled())
              return;
 
          if (ExtendedSaves::HasChunk(ExtendedSaves::MakeTag(kUnlockablesExtChunkName)))
@@ -1430,7 +1456,7 @@ namespace CLimitAdjuster
 
      static void OnAfterLoadCribWeapons(const char* save_name, bool has_extension)
      {
-         if (!has_extension)
+         if (!has_extension || !is_weapon_infos_save_ext_enabled())
              return;
 
          if (ExtendedSaves::HasChunk(ExtendedSaves::MakeTag(kCribWeaponsExtChunkName)))
@@ -1472,6 +1498,8 @@ namespace CLimitAdjuster
             BuildVersion::kGitShortHash,
             BuildVersion::kGitDirty ? " dirty" : "");
         AdjusterOptions.force_dyn = ini.ReadInteger("MAIN", "ForceEvenIfBelow", true) != 0;
+        AdjusterOptions.unlockables_save_ext_enabled = ini.ReadInteger("SAVES", "UnlockablesExt", 1) != 0;
+        AdjusterOptions.weapon_infos_save_ext_enabled = ini.ReadInteger("SAVES", "WeaponInfosExt", 1) != 0;
         AdjusterOptions.customization_items_limit = read_count_setting(
             ini, "LIMITS", "CustomizationItems", kVanillaCustomizationItemsLimit);
         AdjusterOptions.items_3d_limit = read_count_setting(
