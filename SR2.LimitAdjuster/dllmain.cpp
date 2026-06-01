@@ -1324,7 +1324,7 @@ namespace CLimitAdjuster
                  150))
              {
                  new_unlockables_array = new unlockable_item[unlockables_capacity]{};
-                 lprintf("Patching customization_logos with %p count=%u capacity=%u\n", new_unlockables_array, unlockables_count, unlockables_capacity);
+                 lprintf("Patching Unlockables with %p count=%u capacity=%u\n", new_unlockables_array, unlockables_count, unlockables_capacity);
                  patch_Unlockables_Array_references(new_unlockables_array);
                  Patch<size_t>(0x6BC990 + 1, unlockables_capacity);
              }
