@@ -1198,13 +1198,20 @@ namespace CLimitAdjuster
 
      void* SAFETYHOOK_CCALL customize_item_system_init()
     {
-         auto items = xtbl_parse_table_node("customization_items.xtbl", (void*)0x0277307C_g);
-         auto dlc_items = xtbl_parse_table_node("dlc_customization_items.xtbl", (void*)0x0277307C_g);
-         items_count = xml_count(items, "Customization_Item");
+         items_count = 0;
 
-         if (dlc_items)
+         if (AdjusterOptions.customization_items_limit.auto_mode)
          {
-             items_count += xml_count(dlc_items, "Customization_Item");
+             auto items = xtbl_parse_table_node("customization_items.xtbl", (void*)0x0277307C_g);
+             auto dlc_items = xtbl_parse_table_node("dlc_customization_items.xtbl", (void*)0x0277307C_g);
+             items_count = xml_count(items, "Customization_Item");
+
+             if (dlc_items)
+             {
+                 items_count += xml_count(dlc_items, "Customization_Item");
+             }
+
+             xtbl_free();
          }
 
          const auto items_capacity = resolve_capacity(
@@ -1212,7 +1219,6 @@ namespace CLimitAdjuster
              AdjusterOptions.customization_items_limit,
              items_count,
              kVanillaCustomizationItemsLimit);
-         xtbl_free();
          if (should_apply_capacity_patch(
              AdjusterOptions.force_dyn,
              AdjusterOptions.customization_items_limit,
@@ -1252,32 +1258,50 @@ namespace CLimitAdjuster
 
      int _cdecl sr2_init_stage_2_hook()
      {
-          auto object_info = xtbl_parse_table_node("items_3d.xtbl", nullptr);
-          auto object_info_count = xml_count(object_info, "Item");
-          const auto object_info_capacity = resolve_capacity(
-              "Items3D",
-              AdjusterOptions.items_3d_limit,
-              object_info_count,
-              kVanillaItems3DLimit);
+           uint32_t object_info_count = 0;
+           if (AdjusterOptions.items_3d_limit.auto_mode)
+           {
+               auto object_info = xtbl_parse_table_node("items_3d.xtbl", nullptr);
+               object_info_count = xml_count(object_info, "Item");
+               xtbl_free();
+           }
+
+           const auto object_info_capacity = resolve_capacity(
+               "Items3D",
+               AdjusterOptions.items_3d_limit,
+               object_info_count,
+               kVanillaItems3DLimit);
           if (should_apply_capacity_patch(
               AdjusterOptions.force_dyn,
               AdjusterOptions.items_3d_limit,
               object_info_capacity,
               kVanillaItems3DLimit)) {
               auto new_obj_items = new object_item_info[object_info_capacity]{};
-              lprintf("Patching items_3d with %p count=%u capacity=%u\n", new_obj_items, object_info_count, object_info_capacity);
-              patch_Obj_item_info_infos_references(new_obj_items);
-          }
-          xtbl_free();
+               lprintf("Patching items_3d with %p count=%u capacity=%u\n", new_obj_items, object_info_count, object_info_capacity);
+               patch_Obj_item_info_infos_references(new_obj_items);
+           }
 
-         auto root_logos = xtbl_parse_table_node("customization_logos.xtbl", nullptr);
+          uint32_t logos_count_wanted = 0;
+          bool should_resolve_logos = !AdjusterOptions.customization_logos_limit.auto_mode;
 
-          if (root_logos)
+          if (AdjusterOptions.customization_logos_limit.auto_mode)
           {
-              auto logos_count_wanted = xml_count(root_logos, "Logo");
-              const auto logos_capacity = resolve_capacity(
-                  "CustomizationLogos",
-                  AdjusterOptions.customization_logos_limit,
+              auto root_logos = xtbl_parse_table_node("customization_logos.xtbl", nullptr);
+
+              if (root_logos)
+              {
+                  logos_count_wanted = xml_count(root_logos, "Logo");
+                  should_resolve_logos = true;
+              }
+
+              xtbl_free();
+          }
+
+           if (should_resolve_logos)
+           {
+               const auto logos_capacity = resolve_capacity(
+                   "CustomizationLogos",
+                   AdjusterOptions.customization_logos_limit,
                   logos_count_wanted,
                   kVanillaCustomizationLogosLimit,
                   kAutoCustomizationLogoHeadroom,
@@ -1289,31 +1313,43 @@ namespace CLimitAdjuster
                   AdjusterOptions.customization_logos_limit,
                   logos_capacity,
                   kVanillaCustomizationLogosLimit))
+               {
+                   auto new_logos_array = new customization_logo[logos_capacity]{};
+                   lprintf("Patching customization_logos with %p count=%u capacity=%u\n", new_logos_array, logos_count_wanted, logos_capacity);
+                   patch_Logos_Array_references(new_logos_array);
+               }
+
+          }
+
+          uint32_t unlockables_count = 0;
+          bool should_resolve_unlockables = !AdjusterOptions.unlockables_limit.auto_mode;
+
+          if (AdjusterOptions.unlockables_limit.auto_mode)
+          {
+              auto unlockables_xml = xtbl_parse_table_node("unlockables.xtbl", nullptr);
+
+              if (unlockables_xml)
               {
-                  auto new_logos_array = new customization_logo[logos_capacity]{};
-                  lprintf("Patching customization_logos with %p count=%u capacity=%u\n", new_logos_array, logos_count_wanted, logos_capacity);
-                  patch_Logos_Array_references(new_logos_array);
+                  unlockables_count = xml_count(unlockables_xml, "Unlockable");
+
+                  auto dlc_unlockables_xml = xtbl_parse_table_node("dlc_unlockables.xtbl", nullptr);
+
+                  if (dlc_unlockables_xml)
+                  {
+                      unlockables_count += xml_count(dlc_unlockables_xml, "Unlockable");
+                  }
+
+                  should_resolve_unlockables = true;
               }
 
-         }
-         xtbl_free();
+              xtbl_free();
+          }
 
-         auto unlockables_xml = xtbl_parse_table_node("unlockables.xtbl", nullptr);
-
-         if (unlockables_xml)
-         {
-             auto unlockables_count = xml_count(unlockables_xml, "Unlockable");
-
-             auto dlc_unlockables_xml = xtbl_parse_table_node("dlc_unlockables.xtbl", nullptr);
-
-             if (dlc_unlockables_xml)
-             {
-                 unlockables_count += xml_count(dlc_unlockables_xml, "Unlockable");
-             }
-
-             const auto unlockables_capacity = resolve_capacity(
-                 "Unlockables",
-                 AdjusterOptions.unlockables_limit,
+          if (should_resolve_unlockables)
+          {
+              const auto unlockables_capacity = resolve_capacity(
+                  "Unlockables",
+                  AdjusterOptions.unlockables_limit,
                  unlockables_count,
                  150);
 
@@ -1325,14 +1361,13 @@ namespace CLimitAdjuster
              {
                  new_unlockables_array = new unlockable_item[unlockables_capacity]{};
                  lprintf("Patching Unlockables with %p count=%u capacity=%u\n", new_unlockables_array, unlockables_count, unlockables_capacity);
-                 patch_Unlockables_Array_references(new_unlockables_array);
-                 Patch<size_t>(0x6BC990 + 1, unlockables_capacity);
-             }
-         }
-         xtbl_free();
+                  patch_Unlockables_Array_references(new_unlockables_array);
+                  Patch<size_t>(0x6BC990 + 1, unlockables_capacity);
+              }
+          }
 
-         return sr2_init_stage_2D.unsafe_ccall<int>();
-     }
+          return sr2_init_stage_2D.unsafe_ccall<int>();
+      }
 
      static void OnBeforeSaveUnlockables(const char* save_name)
      {

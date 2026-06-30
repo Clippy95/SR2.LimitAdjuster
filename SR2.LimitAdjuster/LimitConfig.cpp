@@ -100,13 +100,6 @@ namespace CLimitAdjuster
         else
         {
             wanted = (std::max<uint64_t>)(vanilla_limit, setting.value);
-            if (wanted < detected_count)
-            {
-                lprintf("%.*s requested fixed cap %u, but xtbl needs %u. Promoting to %u\n",
-                    static_cast<int>(label.size()), label.data(),
-                    static_cast<uint32_t>(wanted), detected_count, detected_count);
-                wanted = detected_count;
-            }
         }
 
         if (hard_max != 0 && wanted > hard_max)
