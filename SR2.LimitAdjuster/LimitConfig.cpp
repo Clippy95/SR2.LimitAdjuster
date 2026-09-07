@@ -23,9 +23,10 @@ namespace CLimitAdjuster
         CIniReader& ini,
         std::string_view section,
         std::string_view key,
-        uint32_t vanilla_limit)
+        uint32_t vanilla_limit,
+        std::string_view default_value)
     {
-        auto raw = trim_copy(ini.ReadString(section, key, "auto"));
+        auto raw = trim_copy(ini.ReadString(section, key, default_value));
         std::string lowered = raw;
         std::transform(lowered.begin(), lowered.end(), lowered.begin(), [](unsigned char ch) {
             return static_cast<char>(std::tolower(ch));

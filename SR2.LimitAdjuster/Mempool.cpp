@@ -1153,7 +1153,7 @@ namespace CLimitAdjuster
 			string_pool_add_unique_hook.create(0xC06EE0_g, string_pool_add_unqiue_detour);
 		}
 
-		if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempools", 0) == 0)
+		if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempools", 1) == 0)
 			return;
 
 		if (g_mempool_hooks_installed)

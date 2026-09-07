@@ -509,7 +509,7 @@ namespace CLimitAdjuster
         const auto raw_value = static_cast<uint32_t>(ini.ReadInteger(
             "LIMITS",
             "WeaponStoreBucketLimit",
-            kVanillaWeaponStoreBucketLimit));
+            32));
 
         uint32_t limit = (std::max)(raw_value, kVanillaWeaponStoreBucketLimit);
         if (limit > kWeaponStoreBucketHardMax)
@@ -1243,7 +1243,7 @@ namespace CLimitAdjuster
      char _cdecl sr2_init_stage_1_hook()
      {
          CIniReader ini;
-         if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempools", 0) != 0)
+         if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempools", 1) != 0)
          {
              Nop(0xC00E4A, 5);
          }
@@ -1543,7 +1543,7 @@ namespace CLimitAdjuster
             ini, "LIMITS", "CustomizationLogos", kVanillaCustomizationLogosLimit);
 
         AdjusterOptions.unlockables_limit = read_count_setting(
-            ini, "LIMITS", "Unlockables", 150);
+            ini, "LIMITS", "Unlockables", 150, "500");
         AdjusterOptions.weapon_store_bucket_limit = read_weapon_store_bucket_limit(ini);
 
         patch_weapon_store_bucket_limit(AdjusterOptions.weapon_store_bucket_limit);

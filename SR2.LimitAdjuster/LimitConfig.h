@@ -22,7 +22,8 @@ namespace CLimitAdjuster
         CIniReader& ini,
         std::string_view section,
         std::string_view key,
-        uint32_t vanilla_limit);
+        uint32_t vanilla_limit,
+        std::string_view default_value = "auto");
 
     uint32_t resolve_capacity(
         std::string_view label,
