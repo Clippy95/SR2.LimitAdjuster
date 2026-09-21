@@ -13,6 +13,7 @@
 
 #include "include/MemoryMgr.h"
 #include "Mempool.h"
+#include "MempoolApi.h"
 #include <IniReader.h>
 #include <usercaller.hpp>
 #include <safetyhook_inline.hpp>
@@ -35,8 +36,10 @@ namespace CLimitAdjuster
 	{
 		constexpr uintptr_t kRetailStaticMempoolVtbl = 0x00E59480;
 		constexpr uintptr_t kRetailMempoolVtbl = 0x00E58CD4;
+		constexpr uintptr_t kRetailSplitMempoolVtbl = 0x00DE186C;
 		constexpr uint32_t kAutoReserveFloor = 0x04000000;
 		constexpr uint32_t kAutoReserveMultiplier = 8;
+
 
 		struct dynamic_pool_state
 		{
@@ -45,6 +48,7 @@ namespace CLimitAdjuster
 			uint32_t committed_size = 0;
 			uint32_t grow_granularity = 0;
 			bool managed_override = false;
+			bool update_mempool_end_positions = false;
 		};
 
 		struct inline_hook_slot
@@ -80,6 +84,7 @@ namespace CLimitAdjuster
 		uintptr_t g_static_pad_to_page_target = 0;
 		uint32_t g_page_size = 0x1000;
 		bool g_mempool_hooks_installed = false;
+
 
 		std::string make_ascii_lowercase_key(const char* string)
 		{
@@ -291,8 +296,13 @@ namespace CLimitAdjuster
 				pool ? pool->max_pool_size : 0,
 				pool ? pool->start_of_pool : nullptr);
 
-			if (g_dynamic_pools.contains(pool))
+			if (const auto existing = g_dynamic_pools.find(pool);
+				existing != g_dynamic_pools.end())
+			{
+				if (explicit_config && explicit_config->update_mempool_end_positions)
+					existing->second.update_mempool_end_positions = true;
 				return true;
+			}
 
 			const uint32_t initial_size = align_up(static_cast<uint32_t>(pool->max_pool_size), g_page_size);
 			const uint64_t auto_reserve = (std::max<uint64_t>)(
@@ -362,6 +372,8 @@ namespace CLimitAdjuster
 				.reserve_size = reserve_size,
 				.committed_size = initial_size,
 				.grow_granularity = grow_granularity,
+				.update_mempool_end_positions =
+					explicit_config && explicit_config->update_mempool_end_positions,
 			});
 
 			MEMPOOL_LOG("Registered growable mempool %s at %p: commit=0x%X reserve=0x%X granularity=0x%X\n",
@@ -469,6 +481,12 @@ namespace CLimitAdjuster
 
 			state.committed_size = new_committed_size;
 			pool->max_pool_size = static_cast<int>(new_committed_size);
+			if (state.update_mempool_end_positions)
+			{
+				auto* concrete_pool = static_cast<mempool*>(pool);
+				concrete_pool->end_pool_used = static_cast<int>(new_committed_size);
+				concrete_pool->end_pool_used_mark = static_cast<int>(new_committed_size);
+			}
 			MEMPOOL_LOG("Mempool %s at %p grew for %s: commit 0x%X -> 0x%X (reserve 0x%X)\n",
 				pool_name.empty() ? "<invalid>" : pool_name.c_str(),
 				pool,
@@ -1144,9 +1162,149 @@ namespace CLimitAdjuster
 		return result;
 	}
 
+
+    uint32_t __cdecl EnsureEmptyMempoolCapacity(void* raw_pool, uint32_t minimum_bytes,
+        uint32_t reserve_bytes, uint32_t granularity)
+    {
+        if (!minimum_bytes || minimum_bytes > reserve_bytes || reserve_bytes > 0x40000000u
+            || granularity < 0x1000 || granularity > 0x1000000
+            || (granularity & (granularity - 1)) != 0)
+            return 0;
+        auto* pool = static_cast<mempool*>(raw_pool);
+        if (!is_readable_range(pool, sizeof(*pool))) return 0;
+        const auto vft = reinterpret_cast<uintptr_t>(pool->vft);
+        if (vft != Memory::DynBaseAddress(kRetailMempoolVtbl)
+            && vft != Memory::DynBaseAddress(kRetailSplitMempoolVtbl)) return 0;
+        std::scoped_lock lock(g_dynamic_pool_mutex);
+        if (!looks_like_supported_pool(pool) || pool->pool_used != 0 || pool->pool_used_mark != 0
+            || pool->end_pool_used != pool->max_pool_size
+            || pool->end_pool_used_mark != pool->max_pool_size) return 0;
+        if (minimum_bytes <= static_cast<uint32_t>(pool->max_pool_size)) return 1;
+        DynamicMempoolConfig config{};
+        config.reserve_size = reserve_bytes;
+        config.grow_granularity = granularity;
+        config.update_mempool_end_positions = true;
+        if (!register_pool_locked(pool, &config)) return 0;
+        return grow_pool_locked(pool, minimum_bytes, 1, "external empty-pool capacity request") ? 1u : 0u;
+    }
+
+	void ConfigureCutsceneMempool()
+	{
+		static std::once_flag configured;
+		std::call_once(configured, []()
+		{
+			CIniReader ini;
+			if (!ini.ReadInteger("EXPERIMENTAL", "DynamicMempools", 1))
+				return;
+
+			struct virtual_pool_prefix
+			{
+				static_mempool_base primary;
+				CRITICAL_SECTION critical_section;
+				uint32_t field_64;
+				uint32_t committed_size;
+				uint32_t virtual_flags;
+				void* page_pool;
+			};
+			static_assert(offsetof(virtual_pool_prefix, committed_size) == 0x68);
+			static_assert(offsetof(virtual_pool_prefix, page_pool) == 0x70);
+			auto* virt = reinterpret_cast<virtual_pool_prefix*>(Memory::DynBaseAddress(0x02771178));
+			if (!is_readable_range(virt, sizeof(*virt)))
+				return;
+			auto& pool = virt->primary;
+			if (pool.vft != reinterpret_cast<mempool_base_vtbl*>(Memory::DynBaseAddress(0x00E593A4))
+				|| get_pool_name(&pool) != "cutscene")
+			{
+				lprintf("Cutscene pool reserve skipped: native virtual-pool layout did not validate.\n");
+				return;
+			}
+			if (pool.max_pool_size != 0x400000 || pool.pool_used || pool.pool_used_mark
+				|| virt->committed_size || !pool.start_of_pool || pool.default_alignment != 16)
+			{
+				lprintf("Cutscene pool reserve skipped: pool is not empty/native (used=0x%X mark=0x%X committed=0x%X max=0x%X).\n",
+					pool.pool_used, pool.pool_used_mark, virt->committed_size, pool.max_pool_size);
+				return;
+			}
+			const auto requested = align_up((std::max)(
+				static_cast<uint32_t>(pool.max_pool_size) * kAutoReserveMultiplier,
+				kAutoReserveFloor), g_page_size);
+			const auto requested_mib = requested / (1024u * 1024u);
+			struct page_pool_prefix
+			{
+				CRITICAL_SECTION critical_section;
+				uint32_t field_18;
+				uint32_t size, pages, pages_free, peak_usage, virtual_pool_count;
+				char name[32];
+				bool keep_allocated;
+			};
+			static_assert(offsetof(page_pool_prefix, size) == 0x1C);
+			static_assert(offsetof(page_pool_prefix, keep_allocated) == 0x50);
+			auto* parent = static_cast<page_pool_prefix*>(virt->page_pool);
+			if (parent != reinterpret_cast<page_pool_prefix*>(Memory::DynBaseAddress(0x0276D140))
+				|| !is_readable_range(parent, sizeof(*parent)))
+			{
+				lprintf("Cutscene pool reserve skipped: unexpected backing page pool.\n");
+				return;
+			}
+			struct critical_section_lock
+			{
+				CRITICAL_SECTION* cs;
+				explicit critical_section_lock(CRITICAL_SECTION* value) : cs(value) { EnterCriticalSection(cs); }
+				~critical_section_lock() { LeaveCriticalSection(cs); }
+			};
+			// Same lock order as native virtual_mempool::allocate: child, parent.
+			critical_section_lock child_lock(&virt->critical_section);
+			critical_section_lock parent_lock(&parent->critical_section);
+			const uint32_t extra_bytes = requested - static_cast<uint32_t>(pool.max_pool_size);
+			const uint32_t extra_pages = extra_bytes >> 12; // Native SR2 pages are 4 KiB.
+			if (parent->keep_allocated || (extra_bytes & 0xFFF)
+				|| static_cast<uint64_t>(parent->pages) * 4096 != parent->size
+				|| parent->pages_free > parent->pages
+				|| static_cast<uint64_t>(parent->size) + extra_bytes > UINT32_MAX)
+			{
+				lprintf("Cutscene pool reserve skipped: backing page accounting did not validate.\n");
+				return;
+			}
+			MEMORY_BASIC_INFORMATION region{};
+			if (!VirtualQuery(pool.start_of_pool, &region, sizeof(region))
+				|| region.State != MEM_RESERVE || region.AllocationBase != pool.start_of_pool
+				|| region.BaseAddress != pool.start_of_pool
+				|| region.RegionSize < static_cast<SIZE_T>(pool.max_pool_size))
+			{
+				lprintf("Cutscene pool reserve skipped: backing region is not an empty reservation.\n");
+				return;
+			}
+			void* replacement = VirtualAlloc(nullptr, requested, MEM_RESERVE, PAGE_READWRITE);
+			if (!replacement)
+			{
+				lprintf("Cutscene pool reserve failed for %u MiB (error=%lu); native pool retained.\n", requested_mib, GetLastError());
+				return;
+			}
+			if (!VirtualFree(pool.start_of_pool, 0, MEM_RELEASE))
+			{
+				const DWORD error = GetLastError();
+				VirtualFree(replacement, 0, MEM_RELEASE);
+				lprintf("Cutscene pool reserve skipped: old reserve could not be released (error=%lu).\n", error);
+				return;
+			}
+			parent->size += extra_bytes;
+			parent->pages += extra_pages;
+			parent->pages_free += extra_pages;
+			pool.start_of_pool = replacement;
+			pool.max_pool_size = static_cast<int>(requested);
+			pool.last_allocation = nullptr;
+			lprintf("Dynamic cutscene pool: reserve=%u MiB, base=%p, committed=0; backing budget=%u MiB, free_pages=%u; native demand-commit/release retained.\n",
+				requested_mib, replacement, parent->size / (1024u * 1024u), parent->pages_free);
+		});
+	}
+
 	void Mempool_init()
 	{
 		CIniReader ini;
+		SYSTEM_INFO system_info{};
+		GetSystemInfo(&system_info);
+		if (system_info.dwPageSize)
+			g_page_size = system_info.dwPageSize;
 
 		if (ini.ReadInteger("EXPERIMENTAL", "DynamicStringMempools", 1))
 		{
@@ -1158,11 +1316,6 @@ namespace CLimitAdjuster
 
 		if (g_mempool_hooks_installed)
 			return;
-
-		SYSTEM_INFO system_info{};
-		GetSystemInfo(&system_info);
-		if (system_info.dwPageSize)
-			g_page_size = system_info.dwPageSize;
 
 		const auto static_vtable = Memory::DynBaseAddress(kRetailStaticMempoolVtbl);
 		const auto mempool_vtable = Memory::DynBaseAddress(kRetailMempoolVtbl);
@@ -1204,4 +1357,16 @@ namespace CLimitAdjuster
 			reinterpret_cast<void*>(g_static_release_bytes_target),
 			reinterpret_cast<void*>(g_static_pad_to_page_target));
 	}
+}
+
+#if defined(_M_IX86)
+#pragma comment(linker, "/EXPORT:SR2LA_GetMempoolApi=_SR2LA_GetMempoolApi")
+#endif
+extern "C" const SR2LimitAdjusterApi::MempoolApi* __cdecl
+SR2LA_GetMempoolApi(uint32_t version)
+{
+    static const SR2LimitAdjusterApi::MempoolApi api = {
+        SR2LimitAdjusterApi::kVersion, sizeof(SR2LimitAdjusterApi::MempoolApi),
+        &CLimitAdjuster::EnsureEmptyMempoolCapacity };
+    return version == api.version ? &api : nullptr;
 }

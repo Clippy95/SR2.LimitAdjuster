@@ -1242,6 +1242,7 @@ namespace CLimitAdjuster
      SafetyHookInline sr2_init_stage_1D;
      char _cdecl sr2_init_stage_1_hook()
      {
+         ConfigureCutsceneMempool();
          CIniReader ini;
          if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempools", 1) != 0)
          {

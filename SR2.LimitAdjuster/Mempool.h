@@ -64,8 +64,23 @@ namespace CLimitAdjuster
 	{
 		uint32_t reserve_size = 0;
 		uint32_t grow_granularity = 0x10000;
+		bool update_mempool_end_positions = false;
 	};
 
+	// The retail PC build omits the symbol build's peak_usage field.
+	static_assert(sizeof(mempool_base) == 0x34);
+	static_assert(offsetof(static_mempool_base, last_allocation) == 0x34);
+	static_assert(offsetof(static_mempool_base, start_of_pool) == 0x38);
+	static_assert(offsetof(static_mempool_base, max_pool_size) == 0x3C);
+	static_assert(offsetof(static_mempool_base, default_alignment) == 0x40);
+	static_assert(offsetof(static_mempool_base, pool_used) == 0x44);
+	static_assert(offsetof(static_mempool_base, pool_used_mark) == 0x48);
+	static_assert(sizeof(static_mempool_base) == 0x4C);
+	static_assert(offsetof(mempool, end_pool_used) == 0x4C);
+	static_assert(offsetof(mempool, end_pool_used_mark) == 0x50);
+	static_assert(sizeof(mempool) == 0x54);
+
 	bool RegisterGrowableMempool(static_mempool_base* pool, const DynamicMempoolConfig& config);
+	void ConfigureCutsceneMempool();
 	void Mempool_init();
 }

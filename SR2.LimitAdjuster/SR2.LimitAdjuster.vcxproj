@@ -216,6 +216,7 @@
     <ClInclude Include="LimitConfig.h" />
     <ClInclude Include="Math.h" />
     <ClInclude Include="Mempool.h" />
+    <ClInclude Include="MempoolApi.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="sr_xml.h" />
   </ItemGroup>
