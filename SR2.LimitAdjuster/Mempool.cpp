@@ -1308,7 +1308,16 @@ namespace CLimitAdjuster
 
 		if (ini.ReadInteger("EXPERIMENTAL", "DynamicStringMempools", 1))
 		{
+			constexpr uint8_t bound_check[] = {0x8D,0x54,0x19,0x01,0x3B,0x56,0x3C,0x76,0x07};
+			if (std::memcmp(reinterpret_cast<const void*>(0xC06D95_g), bound_check, sizeof(bound_check)))
+			{
+				lprintf("String-pool padding check differs from the supported executable.\n");
+				FatalAppExitA(0, "Cannot safely install dynamic string pools: unsupported add_string bounds check.");
+				std::terminate();
+			}
+			Memory::VP::Patch<uint8_t>(0xC06D98_g, 3);
 			string_pool_add_unique_hook.create(0xC06EE0_g, string_pool_add_unqiue_detour);
+			lprintf("Dynamic string pools: native bounds check includes padding; overflow uses stable owned strings.\n");
 		}
 
 		if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempools", 1) == 0)

@@ -23,6 +23,14 @@ SafetyHookInline g_initialize,g_reset;
 std::array<SafetyHookMid,4> g_creators;
 using RegisterAbi=uc::abi<uc::eax_ret<uintptr_t>,uc::eax_arg<uint32_t>,uc::ecx_arg<const char*>>;
 uc::inline_hook<RegisterAbi> g_register;
+constexpr uint32_t kCharacterSlots=10;
+constexpr uint32_t kCharacterCpuBytes=2*1024*1024;
+constexpr uint32_t kCharacterGpuBytes=20*1024*1024;
+int __cdecl InitializeContainers(uint32_t* config) {
+    config[1]=kCharacterCpuBytes;
+    config[3]=kCharacterGpuBytes;
+    return reinterpret_cast<int(__cdecl*)(uint32_t*)>(0xA78E60_g)(config);
+}
 const std::array<uintptr_t,4> kCreateSites{{0x4A4216_g,0xA77599_g,0xADAF17_g,0xADAF7D_g}};
 [[noreturn]] void Fail(const char* message) {
     lprintf("Streaming registry: %s",message);FatalAppExitA(0,message);std::terminate();
@@ -139,6 +147,21 @@ void Install() {
         g_creators[i]=safetyhook::create_mid(kCreateSites[i],[](SafetyHookContext& ctx){GrowResources(ctx.eax);});
         if(!g_creators[i]) Fail("Could not install streaming resource growth guard.");
     }
+    // malloc totals and the strides passed to the native container must agree.
+    if(*reinterpret_cast<uint8_t*>(0x51F1FA_g)!=0x68 ||
+       *reinterpret_cast<uint32_t*>(0x51F1FB_g)!=0x129000*kCharacterSlots ||
+       *reinterpret_cast<uint8_t*>(0x51F20C_g)!=0x68 ||
+       *reinterpret_cast<uint32_t*>(0x51F20D_g)!=0x400000*kCharacterSlots ||
+       *reinterpret_cast<uint32_t*>(0x51F84E_g)!=0x129000 ||
+       *reinterpret_cast<uint32_t*>(0x51F7CB_g)!=0x400000 ||
+       *reinterpret_cast<uint32_t*>(0x51F7D4_g)!=kCharacterSlots ||
+       *reinterpret_cast<uint8_t*>(0x51F9C5_g)!=0xE8 ||
+       0x51F9CA_g+*reinterpret_cast<int32_t*>(0x51F9C6_g)!=0xA78E60_g)
+        Fail("Character streaming boot layout differs from the supported executable.");
+    Memory::VP::Patch<uint32_t>(0x51F1FB_g,kCharacterCpuBytes*kCharacterSlots);
+    Memory::VP::Patch<uint32_t>(0x51F20D_g,kCharacterGpuBytes*kCharacterSlots);
+    Memory::VP::InjectHook(0x51F9C5_g,InitializeContainers,Memory::VP::HookType::Call);
+    lprintf("Character streaming: %u native slots, %u CPU / %u GPU bytes each",kCharacterSlots,kCharacterCpuBytes,kCharacterGpuBytes);
     lprintf("Streaming resources, filename runs, filename hash and strings grow during registration.");
 }
 }
