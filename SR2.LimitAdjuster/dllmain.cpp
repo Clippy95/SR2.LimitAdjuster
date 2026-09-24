@@ -5,6 +5,9 @@
 #include "sr_xml.h"
 #include "ExtendedSaves.h"
 #include "LimitConfig.h"
+#include "CharacterLimits.h"
+#include "RigLimits.h"
+#include "StreamResourceLimits.h"
 #include "Mempool.h"
 #include <unordered_map>
 struct vector
@@ -1549,6 +1552,9 @@ namespace CLimitAdjuster
 
         patch_weapon_store_bucket_limit(AdjusterOptions.weapon_store_bucket_limit);
 
+        CharacterLimits::Install();
+        RigLimits::Install();
+        StreamResourceLimits::Install();
         ExtendedSaves::InstallHooks();
         ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSaveUnlockables);
         ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSaveCribWeapons);

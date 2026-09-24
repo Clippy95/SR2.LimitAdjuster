@@ -81,6 +81,14 @@
     <ClInclude Include="ExtendedSaves.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="CharacterLimits.h">
+      <Filter>Header Files</Filter>
+    </ClInclude><ClInclude Include="RigLimits.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="StreamResourceLimits.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="LimitConfig.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -89,6 +97,14 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="CharacterLimits.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile><ClCompile Include="RigLimits.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="StreamResourceLimits.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="dllmain.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

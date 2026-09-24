@@ -214,6 +214,9 @@
     <ClInclude Include="include\xbyak\xbyak_mnemonic.h" />
     <ClInclude Include="include\xbyak\xbyak_util.h" />
     <ClInclude Include="LimitConfig.h" />
+    <ClInclude Include="CharacterLimits.h" />
+    <ClInclude Include="RigLimits.h" />
+    <ClInclude Include="StreamResourceLimits.h" />
     <ClInclude Include="Math.h" />
     <ClInclude Include="Mempool.h" />
     <ClInclude Include="MempoolApi.h" />
@@ -222,6 +225,9 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="CharacterLimits.cpp" />
+    <ClCompile Include="RigLimits.cpp" />
+    <ClCompile Include="StreamResourceLimits.cpp" />
     <ClCompile Include="ExtendedSaves.cpp" />
     <ClCompile Include="include\safetyhook\safetyhook.cpp" />
     <ClCompile Include="include\safetyhook\Zydis.c" />
