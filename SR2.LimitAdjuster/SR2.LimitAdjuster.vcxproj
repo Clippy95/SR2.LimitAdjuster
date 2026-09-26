@@ -216,6 +216,8 @@
     <ClInclude Include="LimitConfig.h" />
     <ClInclude Include="CharacterLimits.h" />
     <ClInclude Include="RigLimits.h" />
+    <ClInclude Include="AnimationLimits.h" />
+    <ClInclude Include="AnimationLimitOperands.h" />
     <ClInclude Include="StreamResourceLimits.h" />
     <ClInclude Include="Math.h" />
     <ClInclude Include="Mempool.h" />
@@ -227,6 +229,7 @@
     <ClCompile Include="dllmain.cpp" />
     <ClCompile Include="CharacterLimits.cpp" />
     <ClCompile Include="RigLimits.cpp" />
+    <ClCompile Include="AnimationLimits.cpp" />
     <ClCompile Include="StreamResourceLimits.cpp" />
     <ClCompile Include="ExtendedSaves.cpp" />
     <ClCompile Include="include\safetyhook\safetyhook.cpp" />

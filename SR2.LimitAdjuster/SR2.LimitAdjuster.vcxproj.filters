@@ -83,7 +83,9 @@
     </ClInclude>
     <ClInclude Include="CharacterLimits.h">
       <Filter>Header Files</Filter>
-    </ClInclude><ClInclude Include="RigLimits.h">
+    </ClInclude><ClInclude Include="AnimationLimits.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="AnimationLimitOperands.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="RigLimits.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="StreamResourceLimits.h">
@@ -99,7 +101,8 @@
   <ItemGroup>
     <ClCompile Include="CharacterLimits.cpp">
       <Filter>Source Files</Filter>
-    </ClCompile><ClCompile Include="RigLimits.cpp">
+    </ClCompile><ClCompile Include="AnimationLimits.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="RigLimits.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="StreamResourceLimits.cpp">

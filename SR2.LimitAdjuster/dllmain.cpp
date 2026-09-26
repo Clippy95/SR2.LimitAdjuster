@@ -7,6 +7,7 @@
 #include "LimitConfig.h"
 #include "CharacterLimits.h"
 #include "RigLimits.h"
+#include "AnimationLimits.h"
 #include "StreamResourceLimits.h"
 #include "Mempool.h"
 #include <unordered_map>
@@ -1554,6 +1555,7 @@ namespace CLimitAdjuster
 
         CharacterLimits::Install();
         RigLimits::Install();
+        AnimationLimits::Install();
         StreamResourceLimits::Install();
         ExtendedSaves::InstallHooks();
         ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSaveUnlockables);
