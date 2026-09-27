@@ -1248,6 +1248,24 @@ namespace CLimitAdjuster
      {
          ConfigureCutsceneMempool();
          CIniReader ini;
+         const int wavebank_bytes = ini.ReadInteger("AUDIO", "WavebankBytes", 0);
+         if (wavebank_bytes > 0)
+         {
+             const auto bytes = std::max<uint32_t>(std::clamp(wavebank_bytes, 0x6200000, 0x20000000),
+                 std::max<uint32_t>(*reinterpret_cast<const uint32_t*>(0x51EBD8), *reinterpret_cast<const uint32_t*>(0x51EC1A)));
+             Patch<uint32_t>(0x51EBD8, bytes);
+             Patch<uint32_t>(0x51EC1A, bytes);
+             lprintf("Audio wavebank pool: %u bytes\n", bytes);
+         }
+         const int soundbank_bytes = ini.ReadInteger("AUDIO", "SoundbankBytes", 0);
+         if (soundbank_bytes > 0)
+         {
+             // ESI supplies VirtualAlloc, max_size, end_pos and end_mark here.
+             const auto bytes = std::max<uint32_t>(std::clamp(soundbank_bytes, 0x160000, 0x4000000),
+                 *reinterpret_cast<const uint32_t*>(0x51EC3B));
+             Patch<uint32_t>(0x51EC3B, bytes);
+             lprintf("Audio soundbank pool: %u bytes\n", bytes);
+         }
          if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempools", 1) != 0)
          {
              Nop(0xC00E4A, 5);
