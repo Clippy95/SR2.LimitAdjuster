@@ -155,7 +155,7 @@ const std::array<ArrayOperand, 111> library_operands{{
     {0xCE2CD0_g, 0x24F2F00_g, 0},
     {0xCE2D00_g, 0x24F2F00_g, 0},
     {0xCE2D4D_g, 0x24F2F04_g, 4},
-    {0xCE2D5E_g, 0x251EB04_g, 262148},
+    {0xCE2D5E_g, 0x251EB04_g, kAnimations * 32 + 4}, // free-slot scan end
     {0xCE2E58_g, 0x24F2F00_g, 0},
     {0xCE301E_g, 0x24F2F04_g, 4},
     {0xCE30A2_g, 0x24F2F04_g, 4},
