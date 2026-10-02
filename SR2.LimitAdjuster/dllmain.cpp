@@ -10,6 +10,7 @@
 #include "AnimationLimits.h"
 #include "CustomizationLimits.h"
 #include "MusicLimits.h"
+#include "VehicleVariantLimits.h"
 #include "StreamResourceLimits.h"
 #include "Mempool.h"
 #include <unordered_map>
@@ -1580,6 +1581,7 @@ namespace CLimitAdjuster
         AnimationLimits::Install();
         CustomizationLimits::Install();
         MusicLimits::Install();
+        VehicleVariantLimits::Install();
         StreamResourceLimits::Install();
         ExtendedSaves::InstallHooks();
         ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSaveUnlockables);
