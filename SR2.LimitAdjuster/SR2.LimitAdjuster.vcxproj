@@ -217,6 +217,9 @@
     <ClInclude Include="CharacterLimits.h" />
     <ClInclude Include="RigLimits.h" />
     <ClInclude Include="AnimationLimits.h" />
+    <ClInclude Include="CustomizationLimits.h" />
+    <ClInclude Include="MusicLimits.h" />
+    <ClInclude Include="AnimationGroupCollector.h" />
     <ClInclude Include="AnimationLimitOperands.h" />
     <ClInclude Include="StreamResourceLimits.h" />
     <ClInclude Include="Math.h" />
@@ -230,6 +233,8 @@
     <ClCompile Include="CharacterLimits.cpp" />
     <ClCompile Include="RigLimits.cpp" />
     <ClCompile Include="AnimationLimits.cpp" />
+    <ClCompile Include="CustomizationLimits.cpp" />
+    <ClCompile Include="MusicLimits.cpp" />
     <ClCompile Include="StreamResourceLimits.cpp" />
     <ClCompile Include="ExtendedSaves.cpp" />
     <ClCompile Include="include\safetyhook\safetyhook.cpp" />

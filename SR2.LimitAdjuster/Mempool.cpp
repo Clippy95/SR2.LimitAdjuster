@@ -37,8 +37,9 @@ namespace CLimitAdjuster
 		constexpr uintptr_t kRetailStaticMempoolVtbl = 0x00E59480;
 		constexpr uintptr_t kRetailMempoolVtbl = 0x00E58CD4;
 		constexpr uintptr_t kRetailSplitMempoolVtbl = 0x00DE186C;
-		constexpr uint32_t kAutoReserveFloor = 0x04000000;
-		constexpr uint32_t kAutoReserveMultiplier = 8;
+		// A reserve consumes scarce 32-bit address space even before pages commit.
+		constexpr uint32_t kAutoReserveFloor = 0x01000000;
+		constexpr uint32_t kAutoReserveMultiplier = 4;
 
 
 		struct dynamic_pool_state
@@ -56,6 +57,27 @@ namespace CLimitAdjuster
 			uintptr_t target = 0;
 			SafetyHookInline hook{};
 		};
+
+		SafetyHookInline g_virtual_pool_init_hook{};
+		SafetyHookInline g_common_get_virtual_pool_hook{};
+		uint32_t g_common_default_reserve = 0;
+		void __fastcall virtual_pool_init_detour(void* self, void*, void* parent,
+			const char* name, uint32_t size, bool keep, uint32_t granularity)
+		{
+			void* effective_parent = parent ? parent : *reinterpret_cast<void**>(
+				static_cast<uint8_t*>(self) + 0x70);
+			if (!size && g_common_default_reserve && effective_parent ==
+				reinterpret_cast<void*>(Memory::DynBaseAddress(0x0276D140)))
+				size = g_common_default_reserve;
+			g_virtual_pool_init_hook.unsafe_thiscall<void>(self, parent, name, size, keep, granularity);
+		}
+
+		int __stdcall common_get_virtual_pool_detour(const char* name, uint32_t size)
+		{
+			if (!size && g_common_default_reserve)
+				size = g_common_default_reserve;
+			return g_common_get_virtual_pool_hook.unsafe_stdcall<int>(name, size);
+		}
 
 		std::recursive_mutex g_dynamic_pool_mutex;
 		std::unordered_map<static_mempool_base*, dynamic_pool_state> g_dynamic_pools;
@@ -1225,9 +1247,7 @@ namespace CLimitAdjuster
 					pool.pool_used, pool.pool_used_mark, virt->committed_size, pool.max_pool_size);
 				return;
 			}
-			const auto requested = align_up((std::max)(
-				static_cast<uint32_t>(pool.max_pool_size) * kAutoReserveMultiplier,
-				kAutoReserveFloor), g_page_size);
+			const uint32_t requested = 64u * 1024 * 1024;
 			const auto requested_mib = requested / (1024u * 1024u);
 			struct page_pool_prefix
 			{
@@ -1272,6 +1292,26 @@ namespace CLimitAdjuster
 				|| region.RegionSize < static_cast<SIZE_T>(pool.max_pool_size))
 			{
 				lprintf("Cutscene pool reserve skipped: backing region is not an empty reservation.\n");
+				return;
+			}
+			const auto init = Memory::DynBaseAddress(0x00BFC630);
+			if (*reinterpret_cast<const uintptr_t*>(Memory::DynBaseAddress(0x00E593A4) + 80) != init)
+				return;
+			g_common_default_reserve = parent->size;
+			g_virtual_pool_init_hook = safetyhook::create_inline(
+				reinterpret_cast<void*>(init), reinterpret_cast<void*>(virtual_pool_init_detour));
+			if (!g_virtual_pool_init_hook) {
+				g_common_default_reserve = 0;
+				lprintf("Cutscene pool reserve skipped: cannot preserve native child reserve policy.\n");
+				return;
+			}
+			g_common_get_virtual_pool_hook = safetyhook::create_inline(
+				reinterpret_cast<void*>(Memory::DynBaseAddress(0x00C15470)),
+				reinterpret_cast<void*>(common_get_virtual_pool_detour));
+			if (!g_common_get_virtual_pool_hook) {
+				g_virtual_pool_init_hook.reset();
+				g_common_default_reserve = 0;
+				lprintf("Cutscene pool reserve skipped: cannot preserve cached pool reserve policy.\n");
 				return;
 			}
 			void* replacement = VirtualAlloc(nullptr, requested, MEM_RESERVE, PAGE_READWRITE);

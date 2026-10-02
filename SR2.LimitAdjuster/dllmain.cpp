@@ -8,6 +8,8 @@
 #include "CharacterLimits.h"
 #include "RigLimits.h"
 #include "AnimationLimits.h"
+#include "CustomizationLimits.h"
+#include "MusicLimits.h"
 #include "StreamResourceLimits.h"
 #include "Mempool.h"
 #include <unordered_map>
@@ -1239,7 +1241,9 @@ namespace CLimitAdjuster
              lprintf("Patching customization_items with %p count=%u capacity=%u\n", new_items, items_count, items_capacity);
              patch_customization_item_items_references(new_items);
           }
-        return customize_item_system_initD.unsafe_ccall<void*>();
+        auto result = customize_item_system_initD.unsafe_ccall<void*>();
+        CustomizationLimits::LogUsage();
+        return result;
 
 
     }
@@ -1574,6 +1578,8 @@ namespace CLimitAdjuster
         CharacterLimits::Install();
         RigLimits::Install();
         AnimationLimits::Install();
+        CustomizationLimits::Install();
+        MusicLimits::Install();
         StreamResourceLimits::Install();
         ExtendedSaves::InstallHooks();
         ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSaveUnlockables);

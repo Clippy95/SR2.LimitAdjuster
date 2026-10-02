@@ -83,8 +83,8 @@ const std::array<ArrayOperand, 85> anims_operands{{
     {0xB07ECE_g, 0x15B8800_g, 0},
     {0xB12569_g, 0x15B8800_g, 0},
     {0xB1C53F_g, 0x15B8800_g, 0},
-    {0x6E909F_g, 0x16294C4_g, 8192 * 84 + 20},
-    {0x6E9103_g, 0x16294C4_g, 8192 * 84 + 20},
+    {0x6E909F_g, 0x16294C4_g, kAnimations * 84 + 20},
+    {0x6E9103_g, 0x16294C4_g, kAnimations * 84 + 20},
 }};
 const std::array<ArrayOperand, 27> sets_operands{{
     {0x446442_g, 0x168B090_g, 0},
@@ -232,19 +232,19 @@ const std::array<ArrayOperand, 1> triggers_operands{{
     {0xCE2C0B_g, 0x24EC970_g, 0},
 }};
 const std::array<ConstantOperand, 13> constant_operands{{
-    {0x6E9048_g, 5500, 8192},
-    {0x6E9458_g, 5500, 8192},
-    {0x6E9536_g, 5500, 8192},
-    {0x6EE290_g, 5500, 8192},
-    {0xCE2D38_g, 5600, 8192},
-    {0xCEC156_g, 5600, 8192},
-    {0xCE2E51_g, 179200, 262144},
-    {0xCEC101_g, 179200, 262144},
-    {0xCEC797_g, 179200, 262144},
-    {0x6EF10F_g, 137500, 524288},
-    {0x6EF14E_g, 22000, 32768},
-    {0x6EF161_g, 5500, 8192},
-    {0xCE2BB6_g, 3250, 16384},
+    {0x6E9048_g, 5500, static_cast<uint32_t>(kAnimations)},
+    {0x6E9458_g, 5500, static_cast<uint32_t>(kAnimations)},
+    {0x6E9536_g, 5500, static_cast<uint32_t>(kAnimations)},
+    {0x6EE290_g, 5500, static_cast<uint32_t>(kAnimations)},
+    {0xCE2D38_g, 5600, static_cast<uint32_t>(kAnimations)},
+    {0xCEC156_g, 5600, static_cast<uint32_t>(kAnimations)},
+    {0xCE2E51_g, 179200, static_cast<uint32_t>(kAnimations * 32)},
+    {0xCEC101_g, 179200, static_cast<uint32_t>(kAnimations * 32)},
+    {0xCEC797_g, 179200, static_cast<uint32_t>(kAnimations * 32)},
+    {0x6EF10F_g, 137500, static_cast<uint32_t>(kAnimations * 64)},
+    {0x6EF14E_g, 22000, static_cast<uint32_t>(kAnimations * 4)},
+    {0x6EF161_g, 5500, static_cast<uint32_t>(kAnimations)},
+    {0xCE2BB6_g, 3250, static_cast<uint32_t>(kTriggers)},
 }};
 
 const std::array<ArrayOperand,4> group_sets_operands{{
