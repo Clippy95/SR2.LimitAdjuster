@@ -13,6 +13,7 @@
 #include "VehicleVariantLimits.h"
 #include "StreamResourceLimits.h"
 #include "Mempool.h"
+#include "HavokMemoryLimits.h"
 #include <unordered_map>
 struct vector
 {
@@ -1271,6 +1272,7 @@ namespace CLimitAdjuster
              Patch<uint32_t>(0x51EC3B, bytes);
              lprintf("Audio soundbank pool: %u bytes\n", bytes);
          }
+         HavokMemoryLimits::Install(ini);   // before stage 2's havok_system_init installs hkSystemMalloc/Free
          if (ini.ReadInteger("EXPERIMENTAL", "DynamicMempools", 1) != 0)
          {
              Nop(0xC00E4A, 5);

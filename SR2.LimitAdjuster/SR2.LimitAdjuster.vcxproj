@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -219,6 +219,7 @@
     <ClInclude Include="AnimationLimits.h" />
     <ClInclude Include="CustomizationLimits.h" />
     <ClInclude Include="MusicLimits.h" />
+    <ClInclude Include="HavokMemoryLimits.h" />
     <ClInclude Include="VehicleVariantLimits.h" />
     <ClInclude Include="AnimationGroupCollector.h" />
     <ClInclude Include="AnimationLimitOperands.h" />
@@ -236,6 +237,7 @@
     <ClCompile Include="AnimationLimits.cpp" />
     <ClCompile Include="CustomizationLimits.cpp" />
     <ClCompile Include="MusicLimits.cpp" />
+    <ClCompile Include="HavokMemoryLimits.cpp" />
     <ClCompile Include="VehicleVariantLimits.cpp" />
     <ClCompile Include="StreamResourceLimits.cpp" />
     <ClCompile Include="ExtendedSaves.cpp" />

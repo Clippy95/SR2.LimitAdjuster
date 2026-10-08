@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "ExtendedSaves.h"
+#include "ExtendedSaveApi.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -496,4 +497,22 @@ namespace ExtendedSaves
     {
         return g_LoadInProgress;
     }
+}
+
+namespace {
+uint32_t __cdecl HasSaveChunk(const char* name) { return ExtendedSaves::HasChunk(ExtendedSaves::MakeTag(name)); }
+uint32_t __cdecl SetSaveChunk(const char* name, const void* data, uint32_t size, uint32_t version) {
+    return ExtendedSaves::SetChunk(name, data, size, version);
+}
+uint32_t __cdecl RemoveSaveChunk(const char* name) { return ExtendedSaves::RemoveChunk(name); }
+}
+#if defined(_M_IX86)
+#pragma comment(linker, "/EXPORT:SR2LA_GetExtendedSaveApi=_SR2LA_GetExtendedSaveApi")
+#endif
+extern "C" const SR2LimitAdjusterApi::ExtendedSaveApi* __cdecl
+SR2LA_GetExtendedSaveApi(uint32_t version) {
+    static const SR2LimitAdjusterApi::ExtendedSaveApi api{
+        SR2LimitAdjusterApi::kExtendedSaveVersion, sizeof(SR2LimitAdjusterApi::ExtendedSaveApi),
+        &HasSaveChunk, &SetSaveChunk, &RemoveSaveChunk};
+    return version == api.version && ExtendedSaves::g_HooksInstalled ? &api : nullptr;
 }
