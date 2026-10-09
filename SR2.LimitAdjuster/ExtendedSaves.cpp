@@ -505,6 +505,22 @@ uint32_t __cdecl SetSaveChunk(const char* name, const void* data, uint32_t size,
     return ExtendedSaves::SetChunk(name, data, size, version);
 }
 uint32_t __cdecl RemoveSaveChunk(const char* name) { return ExtendedSaves::RemoveChunk(name); }
+uint32_t __cdecl CopySaveChunk(const char* name, void* data, uint32_t capacity,
+    uint32_t* size, uint32_t* version) {
+    if (!size || !version) return 0;
+    *size = *version = 0;
+    const auto tag = ExtendedSaves::MakeTag(name);
+    std::scoped_lock lock(ExtendedSaves::g_ExtMutex);
+    const auto it = ExtendedSaves::g_Chunks.find(tag);
+    if (it == ExtendedSaves::g_Chunks.end()) return 0;
+    const auto& chunk = it->second;
+    *size = static_cast<uint32_t>(chunk.payload.size());
+    *version = chunk.version;
+    if (!data) return 1;
+    if (capacity < *size) return 0;
+    if (*size) std::memcpy(data, chunk.payload.data(), *size);
+    return 1;
+}
 }
 #if defined(_M_IX86)
 #pragma comment(linker, "/EXPORT:SR2LA_GetExtendedSaveApi=_SR2LA_GetExtendedSaveApi")
@@ -513,6 +529,6 @@ extern "C" const SR2LimitAdjusterApi::ExtendedSaveApi* __cdecl
 SR2LA_GetExtendedSaveApi(uint32_t version) {
     static const SR2LimitAdjusterApi::ExtendedSaveApi api{
         SR2LimitAdjusterApi::kExtendedSaveVersion, sizeof(SR2LimitAdjusterApi::ExtendedSaveApi),
-        &HasSaveChunk, &SetSaveChunk, &RemoveSaveChunk};
+        &HasSaveChunk, &SetSaveChunk, &RemoveSaveChunk, &CopySaveChunk};
     return version == api.version && ExtendedSaves::g_HooksInstalled ? &api : nullptr;
 }
