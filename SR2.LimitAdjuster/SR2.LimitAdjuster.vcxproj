@@ -224,6 +224,7 @@
     <ClInclude Include="AnimationGroupCollector.h" />
     <ClInclude Include="AnimationLimitOperands.h" />
     <ClInclude Include="StreamResourceLimits.h" />
+    <ClInclude Include="VintLimits.h" />
     <ClInclude Include="Math.h" />
     <ClInclude Include="Mempool.h" />
     <ClInclude Include="MempoolApi.h" />
@@ -240,6 +241,7 @@
     <ClCompile Include="HavokMemoryLimits.cpp" />
     <ClCompile Include="VehicleVariantLimits.cpp" />
     <ClCompile Include="StreamResourceLimits.cpp" />
+    <ClCompile Include="VintLimits.cpp" />
     <ClCompile Include="ExtendedSaves.cpp" />
     <ClCompile Include="include\safetyhook\safetyhook.cpp" />
     <ClCompile Include="include\safetyhook\Zydis.c" />

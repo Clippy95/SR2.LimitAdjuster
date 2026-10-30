@@ -14,6 +14,7 @@
 #include "StreamResourceLimits.h"
 #include "Mempool.h"
 #include "HavokMemoryLimits.h"
+#include "VintLimits.h"
 #include <unordered_map>
 struct vector
 {
@@ -1585,6 +1586,7 @@ namespace CLimitAdjuster
         MusicLimits::Install();
         VehicleVariantLimits::Install();
         StreamResourceLimits::Install();
+        VintLimits::Install(ini);
         ExtendedSaves::InstallHooks();
         ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSaveUnlockables);
         ExtendedSaves::RegisterBeforeSaveCallback(OnBeforeSaveCribWeapons);
