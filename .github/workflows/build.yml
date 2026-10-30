@@ -1,0 +1,44 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    # The project targets the VS 2022 (v143) toolset.
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # GenerateBuildInfo.ps1 needs the full commit count
+
+      - name: Build Release x86
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $msbuild = & $vswhere -latest -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+          & $msbuild SR2.LimitAdjuster.sln /m /nologo /verbosity:minimal /p:Configuration=Release /p:Platform=x86
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path package/scripts | Out-Null
+          Copy-Item Release/SR2.LimitAdjuster.asi, Release/SR2.LimitAdjuster.pdb, SR2.LimitAdjuster/SR2.LimitAdjuster.ini -Destination package/scripts
+          "REV=$(git rev-list --count HEAD)" >> $env:GITHUB_ENV
+          "HASH=$(git rev-parse --short HEAD)" >> $env:GITHUB_ENV
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SR2.LimitAdjuster-r${{ env.REV }}-${{ env.HASH }}
+          path: package
